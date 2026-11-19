@@ -91,7 +91,7 @@ def make_windows_resource(compiler: Path, dst: Path, triple: str = "x86_64-w64-m
                          "llvm-windres", "llvm-windres.exe") if (compiler / "bin" / n).exists()), None)
         if windres is None:
             sys.exit("make_kit: no windres in the Windows compiler (needed for the game's icon)")
-        sh(str(windres), "-O", "coff", str(rc), str(dst), cwd=td)
+        sh(str(windres.absolute()), "-O", "coff", str(rc), str(Path(dst).resolve()), cwd=td)   # cwd differs: absolute paths
 
 
 def check_lgpl(ffmpeg: Path):

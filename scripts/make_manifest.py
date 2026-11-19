@@ -119,6 +119,12 @@ def check(m: dict, build: Path) -> int:
     want = set(m["runtime_sources"]) | set(m["game_sources"])
     got = {p for p in seen if p.startswith(("psprecomp/src/", "game/"))
            and not p.startswith(("psprecomp/src/tools", "game/gen"))}
+    if not any(p.startswith("game/") for p in got):
+        # game/CMakeLists.txt adds the game target only once generated C exists, which a
+        # fresh checkout (CI, the release workflow) never has: check the runtime alone.
+        print("manifest check: no game target configured (no generated C); "
+              "checking the runtime sources only", file=sys.stderr)
+        want = set(m["runtime_sources"])
     problems = []
     for p in sorted(want - got):
         problems.append(f"in the manifest, not built by CMake: {p}")
