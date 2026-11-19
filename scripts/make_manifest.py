@@ -118,7 +118,11 @@ def check(m: dict, build: Path) -> int:
         seen[rel] = [t[2:] for t in e["command"].split() if t.startswith("-D")]
     want = set(m["runtime_sources"]) | set(m["game_sources"])
     got = {p for p in seen if p.startswith(("psprecomp/src/", "game/"))
-           and not p.startswith(("psprecomp/src/tools", "game/gen"))}
+           and not p.startswith(("psprecomp/src/tools", "game/gen", "game/tests/"))}
+    # game/tests/ is deliberately out of the kit: the kit is what a player builds the
+    # game with, and the unit tests (built by CMake even without a game target) are
+    # not part of that. Left in `got` they would also look like a game target on a
+    # clean checkout and make every game/*.c read as missing.
     if not any(p.startswith("game/") for p in got):
         # game/CMakeLists.txt adds the game target only once generated C exists, which a
         # fresh checkout (CI, the release workflow) never has: check the runtime alone.
