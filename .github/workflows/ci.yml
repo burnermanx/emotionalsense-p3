@@ -20,7 +20,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             ninja-build libsdl2-dev libvulkan-dev \
-            python3-pil python3-pil.imagetk python3-tk
+            python3-pil python3-pil.imagetk python3-tk python3-fonttools
       - name: Configure
         run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
       - name: Build
@@ -29,6 +29,8 @@ jobs:
         run: cd build && ctest -R "raster|emit" --output-on-failure
       - name: Kit manifest agrees with CMake
         run: python3 scripts/make_manifest.py --check build
+      - name: Launcher assets (fonts subset, theme images; the screen tests draw with them)
+        run: python3 launcher/assets/build_assets.py --cache "$RUNNER_TEMP/es-assets"
       - name: Launcher tests (translation keys, language detection, release guard)
         run: python3 -m unittest discover launcher/tests
 
