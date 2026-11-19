@@ -36,6 +36,10 @@ env:
   SDL2_SRC_SHA256: 24b574f71c87a763f50704bbb630cbe38298d544a1f890f099a4696b1d6beba4
   # GPL-3.0: built and shipped as a separate program, with its source attached.
   PSPDECRYPT_REV: c156627db7634d395c380c0a9589130f603307fc
+  # BSD-3-Clause: the CHD reader (libchdr, as used by PPSSPP and RetroArch), built as a shared
+  # library per target and loaded by the launcher. A git revision is content-addressed (SHA-1),
+  # so the checkout below is the pin; its bundled lzma/miniz/zstd/dr_flac are the vendored copies.
+  LIBCHDR_REV: 47d794151b2b64f6aba60304e6480f4f5a2bc24b
 
 jobs:
   source:
@@ -151,6 +155,17 @@ jobs:
           make -C tools-src/pspdecrypt -j"$(nproc)" CC=gcc CXX=g++
           ldd tools-src/pspdecrypt/pspdecrypt
 
+      - name: libchdr (BSD-3, shared library for CHD images, pinned revision)
+        run: |
+          set -eu
+          git clone https://github.com/rtissera/libchdr.git tools-src/libchdr
+          git -C tools-src/libchdr checkout -q "$LIBCHDR_REV"
+          test "$(git -C tools-src/libchdr rev-parse HEAD)" = "$LIBCHDR_REV"
+          cmake -S tools-src/libchdr -B tools-src/libchdr/build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON -DCHDR_WANT_TESTS=OFF
+          cmake --build tools-src/libchdr/build --target chdr
+          ldd tools-src/libchdr/build/libchdr.so
+
       - name: Toolchains and libraries (pinned, checksummed)
         env:
           ZIG_SHA: ${{ matrix.zig_host == 'x86_64' && env.ZIG_SHA256 || env.ZIG_AARCH64_SHA256 }}
@@ -178,7 +193,8 @@ jobs:
             --compiler "dl/zig-${{ matrix.zig_host }}-linux-${ZIG_VERSION}" --sdl2 sdlp \
             --sdl2-arch-include /usr/include/${{ matrix.libdir }}/SDL2 \
             --ffmpeg "dl/ffmpeg-${FFMPEG_BUILD}-${{ matrix.ffmpeg_asset }}-lgpl-shared-8.1" \
-            --pspdecrypt tools-src/pspdecrypt/pspdecrypt
+            --pspdecrypt tools-src/pspdecrypt/pspdecrypt \
+            --libchdr tools-src/libchdr/build/libchdr.so
 
       - name: Selftest of the kit (compiles the runtime, runs a test)
         run: python launcher/es_main.py --selftest --kit kit
@@ -288,6 +304,27 @@ jobs:
           cmake --build sdl-build
           cmake --install sdl-build
 
+      - name: libchdr.dll (BSD-3, shared library for CHD images, pinned revision)
+        run: |
+          set -eu
+          if [ '${{ matrix.target }}' = windows-x86_64 ]; then
+            MINGW="$PWD/dl/llvm-mingw-${LLVM_MINGW}-ucrt-x86_64"; PROC=AMD64
+          else
+            MINGW="$PWD/dl/llvm-mingw-${LLVM_MINGW}-ucrt-aarch64"; PROC=ARM64
+          fi
+          git clone https://github.com/rtissera/libchdr.git tools-src/libchdr
+          git -C tools-src/libchdr checkout -q "$LIBCHDR_REV"
+          test "$(git -C tools-src/libchdr rev-parse HEAD)" = "$LIBCHDR_REV"
+          cmake -S tools-src/libchdr -B tools-src/libchdr/build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=$PROC \
+            -DCMAKE_C_COMPILER="$MINGW/bin/${{ matrix.mingw_triple }}-clang.exe" \
+            -DCMAKE_RC_COMPILER="$MINGW/bin/${{ matrix.mingw_triple }}-windres.exe" \
+            -DBUILD_SHARED_LIBS=ON -DCHDR_WANT_TESTS=OFF
+          cmake --build tools-src/libchdr/build --target chdr
+          dll=$(find tools-src/libchdr/build -maxdepth 1 -name '*chdr*.dll' | head -n 1)
+          test -n "$dll"
+          echo "LIBCHDR_DLL=$dll" >> "$GITHUB_ENV"
+
       - name: Windows kit (the kit builds its own allegrexrecomp.exe)
         run: |
           set -eu
@@ -306,7 +343,7 @@ jobs:
           python scripts/make_kit.py --target ${{ matrix.target }} --out kit \
             --compiler "$MINGW" --sdl2 "$SDL" \
             --ffmpeg "dl/ffmpeg-${FFMPEG_BUILD}-${{ matrix.ffmpeg_asset }}-lgpl-shared-8.1" --vulkan-lib libvulkan-1.a \
-            --pspdecrypt tools-src/pspdecrypt/pspdecrypt.exe
+            --pspdecrypt tools-src/pspdecrypt/pspdecrypt.exe --libchdr "$LIBCHDR_DLL"
 
       - name: Selftest of the kit on a real Windows (compiles the runtime, runs a test)
         run: python launcher/es_main.py --selftest --kit kit

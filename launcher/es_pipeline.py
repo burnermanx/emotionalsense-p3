@@ -93,7 +93,8 @@ class IsoEntry:
 class Iso9660:
     def __init__(self, path: Path):
         self.path = Path(path)
-        self.f = open(self.path, "rb")
+        import es_chd
+        self.f = es_chd.open_image(self.path)        # the ISO itself, or a CHD read sector by sector
         pvd = self._read(16 * SECTOR, SECTOR)
         if pvd[1:6] != b"CD001" or pvd[0] != 1:
             raise PipelineError(f"{self.path} is not an ISO9660 image")
@@ -225,7 +226,8 @@ class Pipeline:
     def run_cmd(self, cmd: list, cwd: Optional[Path] = None, env: Optional[dict] = None,
                 quiet: bool = False) -> str:
         self.log("$ " + " ".join(str(c) for c in cmd))
-        full_env = dict(os.environ)
+        import es_env
+        full_env = es_env.child_env()
         if env:
             full_env.update(env)
         p = subprocess.Popen([str(c) for c in cmd], cwd=str(cwd) if cwd else None,

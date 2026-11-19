@@ -75,12 +75,18 @@ def save_config(data: Path, cfg: dict) -> None:
     (data / "launcher.json").write_text(json.dumps(cfg, indent=1))
 
 
-def game_command(exe: Path, data: Path, cfg: dict, extra=(), confirm: str = "") -> tuple:
+def game_command(exe: Path, data: Path, cfg: dict, extra=(), confirm: str = "", verbose: bool = False) -> tuple:
     """(argv, env) for the prepared game, from the launcher options. `confirm`
-    overrides the option (circle, cross or auto)."""
-    env = dict(os.environ)
+    overrides the option (circle, cross or auto). `verbose` turns the game's diagnostic log on
+    (it prints nothing by default)."""
+    import es_env
+    env = es_env.child_env()
     env["EMOTIONALSENSE_DATA"] = str(data)
-    env["LD_LIBRARY_PATH"] = str(exe.parent) + os.pathsep + env.get("LD_LIBRARY_PATH", "")
+    if verbose:
+        env["EMOTIONALSENSE_LOG"] = "1"
+    # The system's own environment first (never the launcher's `_internal`, see es_env), then
+    # what the game ships with: its folder (SDL2/FFmpeg of the kit).
+    env["LD_LIBRARY_PATH"] = os.pathsep.join(d for d in (str(exe.parent), env.get("LD_LIBRARY_PATH", "")) if d)
     argv = [str(exe), "--data", str(data)]
     if cfg.get("scale", "auto") != "auto":
         argv += ["--internal-scale", str(cfg["scale"])]
@@ -193,7 +199,7 @@ def _show_error(msg: str) -> None:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="EmotionalSense-P3", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--iso", type=Path)
+    ap.add_argument("--iso", type=Path, help="the game image: an .iso, or a .chd (chdman createdvd/createcd)")
     ap.add_argument("--prepare", action="store_true", help="prepare the game (needs --iso the first time)")
     ap.add_argument("--run", action="store_true", help="run the prepared game")
     ap.add_argument("--backup-save", action="store_true")
@@ -210,11 +216,14 @@ def main(argv=None) -> int:
     ap.add_argument("--build-textures", action="store_true", help=argparse.SUPPRESS)  # experimental, needs ES_TEXPACK_PROTO=1
     ap.add_argument("--migrate-legacy", action="store_true",
                     help="copy (never move) data of older versions from their old folders into the data folder")
+    ap.add_argument("--verbose", "-v", action="store_true",
+                    help="print progress and the game's diagnostic log (nothing is printed by default but errors)")
     ap.add_argument("--jobs", type=int, default=os.cpu_count() or 4)
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--version", action="store_true")
     ap.add_argument("game_args", nargs="*")
     a = ap.parse_args(argv)
+    vlog = (lambda s: print(s, file=sys.stderr)) if a.verbose else (lambda s: None)
 
     import es_prepare
     import es_portable
@@ -238,10 +247,12 @@ def main(argv=None) -> int:
         if not old:
             print(t("portable.migrate_none"))
             return 0
-        n = es_portable.migrate(old, data, log=lambda s: print(s, file=sys.stderr))
+        n = es_portable.migrate(old, data, log=vlog)
         print(t("portable.migrated", count=n, path=old))
         return 0
     kit = a.kit or es_prepare.default_kit()
+    import es_chd
+    es_chd.configure(kit)
 
     if a.version:
         try:
@@ -311,12 +322,13 @@ def main(argv=None) -> int:
     if a.prepare or a.run:
         prep = es_prepare.Preparer(es_prepare.PrepareOptions(
             iso=a.iso or Path("."), data_dir=data, kit_dir=kit, jobs=a.jobs, force=a.force),
-            log=lambda s: print(s, file=sys.stderr),
-            progress=lambda f, s: print(f"\r{f * 100:5.1f}%", end="", file=sys.stderr, flush=True))
+            log=vlog,
+            progress=(lambda f, s: print(f"\r{f * 100:5.1f}%", end="", file=sys.stderr, flush=True)) if a.verbose
+            else (lambda f, s: None))
         if a.prepare:
             if not a.iso:
                 if prep.is_prepared():
-                    print(t("cli.prepared", path=prep.game_exe()))
+                    vlog(t("cli.prepared", path=prep.game_exe()))
                     return 0
                 print(t("cli.iso_required"), file=sys.stderr)
                 return 2
@@ -324,14 +336,14 @@ def main(argv=None) -> int:
             try:
                 exe = prep.run()
             except Exception as e:                   # noqa: BLE001
-                print("\n" + t("prepare.failed", error=str(e)), file=sys.stderr)
+                print(("\n" if a.verbose else "") + t("prepare.failed", error=str(e)), file=sys.stderr)
                 return 1
-            print(f"\n{t('cli.prepared', path=exe)} ({time.time() - t0:.0f} s)")
+            vlog(f"\n{t('cli.prepared', path=exe)} ({time.time() - t0:.0f} s)")
         if a.run:
             if not prep.is_prepared():
                 print(t("cli.not_prepared"), file=sys.stderr)
                 return 2
-            cmd, env = game_command(prep.game_exe(), data, cfg, a.game_args, a.confirm)
+            cmd, env = game_command(prep.game_exe(), data, cfg, a.game_args, a.confirm, a.verbose)
             return subprocess.call(cmd, env=env)
         return 0
     import es_gui

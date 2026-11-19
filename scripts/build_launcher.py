@@ -78,7 +78,7 @@ def main() -> int:
        "--add-data", f"{icons / 'icon-256.png'}{sep}.",
        "--hidden-import", "es_gui", "--hidden-import", "es_prepare", "--hidden-import", "es_build",
        "--hidden-import", "es_portable", "--hidden-import", "es_texpack",
-       "--hidden-import", "tkinter.filedialog", "--hidden-import", "es_icon", "--hidden-import", "es_pad",
+       "--hidden-import", "tkinter.filedialog", "--hidden-import", "es_icon", "--hidden-import", "es_pad", "--hidden-import", "es_chd", "--hidden-import", "es_env",
        "--icon", icons / "icon.ico",
        L / "es_main.py")
     app = work / "dist" / NAME

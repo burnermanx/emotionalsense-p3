@@ -26,6 +26,8 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Callable, Optional
 
+import es_env
+
 
 class BuildError(RuntimeError):
     pass
@@ -63,7 +65,7 @@ class Kit:
 def find_system_lib(name: str) -> Path:
     """A library the player's system provides (the Vulkan loader): the kit does
     not carry it, a stub would hide a missing driver."""
-    dirs = [d for d in os.environ.get("LD_LIBRARY_PATH", "").split(":") if d]
+    dirs = [d for d in es_env.child_env().get("LD_LIBRARY_PATH", "").split(":") if d]
     dirs += ["/usr/lib/x86_64-linux-gnu", "/usr/lib/aarch64-linux-gnu", "/usr/lib64", "/usr/lib",
              "/lib/x86_64-linux-gnu", "/lib/aarch64-linux-gnu",
              "/lib64", "/lib", "/usr/local/lib"]
@@ -171,7 +173,7 @@ def build_game(kit: Kit, gen_dir: Path, out_dir: Path, jobs: int,
         src, obj, cmd, stamp = job
         if cancelled():
             return None
-        r = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
+        r = subprocess.run(cmd, capture_output=True, text=True, errors="replace", env=es_env.child_env())
         if r.returncode != 0:
             return (src, (r.stderr or r.stdout)[-1500:])
         obj.with_suffix(".o.sha").write_text(stamp)
@@ -201,7 +203,7 @@ def build_game(kit: Kit, gen_dir: Path, out_dir: Path, jobs: int,
     if lib.exists():
         lib.unlink()
     r = subprocess.run(kit.cmd("ar") + ["qc", str(lib)] + [str(o) for o in rt_objs],
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, env=es_env.child_env())
     if r.returncode != 0:
         raise BuildError("ar failed:\n" + r.stderr[-800:])
     libs: list = []
@@ -219,7 +221,7 @@ def build_game(kit: Kit, gen_dir: Path, out_dir: Path, jobs: int,
     link = (cc + ["-O3"] + wrap + [str(o) for o in other] + extra + ["-o", str(exe), str(lib)]
             + libs + t.get("ldflags", []))
     progress(0.95, "link")
-    r = subprocess.run(link, capture_output=True, text=True, errors="replace")
+    r = subprocess.run(link, capture_output=True, text=True, errors="replace", env=es_env.child_env())
     if r.returncode != 0:
         raise BuildError("link failed:\n" + (r.stderr or r.stdout)[-1500:])
     # Shared libraries the executable needs beside it (SDL2, FFmpeg, winpthread).

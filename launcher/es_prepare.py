@@ -238,7 +238,8 @@ class Preparer:
 
     def _run(self, cmd: list, quiet: bool = True, cwd: Optional[Path] = None, env: Optional[dict] = None) -> str:
         self.log("$ " + " ".join(str(c) for c in cmd))
-        e = dict(os.environ)
+        import es_env
+        e = es_env.child_env()
         if env:
             e.update(env)
         p = subprocess.Popen([str(c) for c in cmd], cwd=str(cwd) if cwd else None, env=e,
@@ -278,9 +279,12 @@ class Preparer:
             raise PipelineError(es_i18n.t("err.wrong_region", expected=f"{GAME_TITLE} [{GAME_ID}]",
                                           title=title, id=disc_id))
         h = hashlib.sha256()
-        size = self.o.iso.stat().st_size
         done = 0
-        with open(self.o.iso, "rb") as f:
+        import es_chd
+        # An ISO is hashed as is; a CHD is hashed over its decoded data sectors, which are
+        # the bytes of the ISO it was made from (so the same hash, the same check below).
+        with es_chd.open_image(self.o.iso) as f:
+            size = es_chd.image_size(f) or 1
             while True:
                 b = f.read(8 << 20)
                 if not b:
@@ -454,8 +458,9 @@ def selftest(kit_dir: Path, jobs: int = 4, log: Callable[[str], None] = print) -
     with tempfile.TemporaryDirectory(prefix="es-selftest-") as td:
         out = Path(td)
         exe = es_build.build_game(kit, out / "gen", out, jobs, log=log, only_runtime=True)
-        env = dict(os.environ)
-        env["LD_LIBRARY_PATH"] = str(out) + os.pathsep + env.get("LD_LIBRARY_PATH", "")
+        import es_env
+        env = es_env.child_env()
+        env["LD_LIBRARY_PATH"] = os.pathsep.join(d for d in (str(out), env.get("LD_LIBRARY_PATH", "")) if d)
         r = subprocess.run([str(exe)], capture_output=True, text=True, env=env, timeout=120)
         log(r.stdout[-400:])
         if r.returncode != 0:

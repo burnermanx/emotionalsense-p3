@@ -141,6 +141,8 @@ def main() -> int:
     ap.add_argument("--ffmpeg", required=True, help="LGPL shared build: include/, lib/ (and bin/ on Windows)")
     ap.add_argument("--allegrexrecomp", help="prebuilt recompiler; omitted = build it with the kit's own compiler")
     ap.add_argument("--pspdecrypt", required=True)
+    ap.add_argument("--libchdr", help="libchdr shared library (libchdr.so / libchdr.dll) for CHD disc images; "
+                    "copied to bin/libchdr.so|dll, which launcher/es_chd.py loads")
     ap.add_argument("--vulkan-lib", help="windows: libvulkan-1.a import library")
     ap.add_argument("--sdl2-arch-include", action="append", default=[],
                     help="linux: extra arch-specific SDL2 header dir (Debian multiarch), repeatable")
@@ -206,6 +208,9 @@ def main() -> int:
         shutil.copy2(a.allegrexrecomp, out / "bin" / rec_name)
     shutil.copy2(a.pspdecrypt, out / "bin" / Path(a.pspdecrypt).name)
     shutil.copy2(ROOT / "scripts" / "check_delay_slots.py", out / "bin" / "check_delay_slots.py")
+    if a.libchdr:
+        # the launcher looks for exactly these names (es_chd.lib_names)
+        shutil.copy2(a.libchdr, out / "bin" / ("chdr.dll" if win else "libchdr.so"), follow_symlinks=True)
 
     # 6. target.json
     if not win:

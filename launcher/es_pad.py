@@ -29,7 +29,8 @@ BTN_UP, BTN_DOWN, BTN_LEFT, BTN_RIGHT = 11, 12, 13, 14
 # SDL_GameControllerAxis
 AX_LX, AX_LY = 0, 1
 DEAD = 14000
-REPEAT_FIRST, REPEAT_NEXT = 0.40, 0.12
+# Console-menu feel: ~350 ms before repeating, then ~13 moves a second.
+REPEAT_FIRST, REPEAT_NEXT = 0.35, 0.075
 
 
 def _candidates(kit: Optional[Path]):
@@ -138,7 +139,11 @@ class Pad:
                     self._next[k] = now + REPEAT_FIRST
                     out.append(k)
                 elif k in ("up", "down", "left", "right") and now >= self._next[k]:
-                    self._next[k] = now + REPEAT_NEXT
+                    # One move per poll at most, never a burst after a slow frame: the next
+                    # one is due REPEAT_NEXT after this one (after the due time, not "now",
+                    # so the rate stays even; resynchronised if we fell far behind).
+                    nxt = self._next[k] + REPEAT_NEXT
+                    self._next[k] = nxt if nxt > now else now + REPEAT_NEXT
                     out.append(k)
             else:
                 self._held[k] = False

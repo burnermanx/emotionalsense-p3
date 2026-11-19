@@ -300,7 +300,8 @@ def scratch_data(data: Path, scratch: Path, ms: Optional[Path] = None) -> Path:
 
 def _run_game(game_exe: Path, scratch: Path, data: Path, cfg: dict, env_extra: dict, frames: int,
               timeout: int, cancelled: Callable[[], bool]) -> int:
-    env = dict(os.environ)
+    import es_env
+    env = es_env.child_env()
     env.update({
         "EMOTIONALSENSE_CONFIRM": "circle", "EMOTIONALSENSE_POLL": "scene", "EMOTIONALSENSE_CLOCK": "virtual",
         "EMOTIONALSENSE_TEX_PACK": str(data / DISABLED_DIR),            # dump the originals
@@ -308,7 +309,7 @@ def _run_game(game_exe: Path, scratch: Path, data: Path, cfg: dict, env_extra: d
         "EMOTIONALSENSE_CRASH": "0", "SDL_AUDIODRIVER": "dummy", "SDL_VIDEODRIVER": "dummy",
     })
     env.update(env_extra)
-    env["LD_LIBRARY_PATH"] = str(game_exe.parent) + os.pathsep + env.get("LD_LIBRARY_PATH", "")
+    env["LD_LIBRARY_PATH"] = os.pathsep.join(d for d in (str(game_exe.parent), env.get("LD_LIBRARY_PATH", "")) if d)
     cmd = [str(game_exe), "--data", str(scratch), "--renderer", "vulkan", "--internal-scale", "1",
            "--frames", str(frames)]
     t0 = time.time()

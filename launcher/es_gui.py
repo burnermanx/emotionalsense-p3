@@ -34,6 +34,7 @@ from es_i18n import t  # noqa: E402
 from PIL import Image, ImageDraw  # noqa: E402
 
 W, H = th.W, th.H
+PAD_POLL_MS = 8          # pad polled ~120 Hz: a press is seen well inside one 60 Hz frame
 SCALES = ["auto", "1", "2", "3", "4"]
 RENDERERS = ["auto", "vulkan", "software"]
 KEY_TRIMS = ["default", "0", "256", "512", "1024"]
@@ -70,7 +71,9 @@ def open_folder(p: Path) -> None:
     elif sys.platform == "darwin":
         subprocess.Popen(["open", str(p)])
     else:
-        subprocess.Popen(["xdg-open", str(p)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        import es_env
+        subprocess.Popen(["xdg-open", str(p)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         env=es_env.child_env())
 
 
 class Ui:
@@ -81,6 +84,8 @@ class Ui:
         import es_prepare
         self.es_main, self.es_prepare = es_main, es_prepare
         self.data, self.kit, self.jobs = data, kit, jobs
+        import es_chd
+        es_chd.configure(kit)
         self.cfg = es_main.load_config(data)
         es_i18n.set_language(self.cfg["language"])
         self.screen = "setup"
@@ -541,6 +546,7 @@ class Ui:
         self.es_main.save_config(self.data, c)
 
     def set_iso(self, p: Path):
+        from es_chd import ChdError
         from es_pipeline import GAME_ID, Iso9660, PipelineError, parse_sfo
         self.iso = p
         try:
@@ -556,7 +562,10 @@ class Ui:
                 iso.close()
         except (OSError, PipelineError, struct_error) as e:
             msg = str(e)
-            self.iso_status = ("err", t("welcome.not_psp") if "ISO9660" in msg else t("welcome.unreadable", error=msg))
+            if isinstance(e, ChdError):                  # already a full, translated sentence
+                self.iso_status = ("err", msg)
+            else:
+                self.iso_status = ("err", t("welcome.not_psp") if "ISO9660" in msg else t("welcome.unreadable", error=msg))
             return
         did, title = sfo.get("DISC_ID", "?"), sfo.get("TITLE", "?")
         if did != GAME_ID:
@@ -571,9 +580,21 @@ struct_error = struct.error
 
 
 def to_photo(tk, img: Image.Image):
+    """An image with alpha (the window icon) as a Tk photo: PNG, base64."""
     buf = io.BytesIO()
     img.save(buf, "PNG", compress_level=1)
     return tk.PhotoImage(data=base64.b64encode(buf.getvalue()))
+
+
+def frame_photo(tk, img: Image.Image, photo=None):
+    """An opaque frame as a Tk photo through raw PPM: no PNG encode, no base64 (about 8x
+    faster, ~3 ms for 960x540). With `photo`, that image is updated in place."""
+    rgb = img.convert("RGB")
+    data = b"P6 %d %d 255\n" % rgb.size + rgb.tobytes()
+    if photo is None:
+        return tk.PhotoImage(data=data, format="PPM")
+    photo.configure(data=data, format="PPM")
+    return photo
 
 
 class App:
@@ -600,7 +621,7 @@ class App:
         names = {"Up": "up", "Down": "down", "Left": "left", "Right": "right", "Return": "ok",
                  "KP_Enter": "ok", "space": "ok", "Escape": "back", "BackSpace": "back"}
         for ks, nm in names.items():
-            self.root.bind(f"<{ks}>", lambda e, nm=nm: self.ui.key(nm, self))
+            self.root.bind(f"<{ks}>", lambda e, nm=nm: self.press(nm))
         self.root.protocol("WM_DELETE_WINDOW", self.quit)
         import es_pad
         self.pad = es_pad.Pad(ui.kit)
@@ -610,6 +631,21 @@ class App:
         self.tick()
         if self.pad.available:
             self.pad_tick()
+
+    def press(self, k: str):
+        """A key (keyboard or pad): act now and redraw at once (idle callbacks coalesce a burst
+        into one frame), not at the next timer tick."""
+        self.ui.key(k, self)
+        self.root.after_idle(self.redraw)
+
+    def redraw(self):
+        ui = self.ui
+        if not ui.dirty:
+            return
+        ui.dirty = False
+        self.photo = frame_photo(self.tk, ui.frame(), self.photo)
+        self.canvas.itemconfig(self.item, image=self.photo)
+        self.root.title(t("app.title"))
 
     def set_confirm(self, mode: str):
         """The pad's south/east buttons follow the confirm setting; so does the footer."""
@@ -622,8 +658,8 @@ class App:
         # also drive (and re-launch from) the hidden launcher.
         if not self.ui.running:
             for k in keys:
-                self.ui.key(k, self)
-        self.root.after(25, self.pad_tick)
+                self.press(k)
+        self.root.after(PAD_POLL_MS, self.pad_tick)
 
     def bring_back(self):
         """The game ended (its exit confirmation, or the window closed): show the
@@ -638,7 +674,7 @@ class App:
             pass
 
     def ask_iso(self):
-        return self.fd.askopenfilename(title=t("welcome.browse"), filetypes=[("ISO", "*.iso *.ISO *.cso"), ("*", "*")])
+        return self.fd.askopenfilename(title=t("welcome.browse"), filetypes=[("ISO / CHD", "*.iso *.ISO *.chd *.CHD *.cso"), ("*", "*")])
 
     def ask_dir(self):
         return self.fd.askdirectory(title=t("options.texture_pack"))
@@ -743,12 +779,10 @@ class App:
             ui.dirty = True
             self.bring_back()
             self.check_crash(code)
-        if ui.dirty:
-            ui.dirty = False
-            self.photo = to_photo(self.tk, ui.frame())
-            self.canvas.itemconfig(self.item, image=self.photo)
-            self.root.title(t("app.title"))
-        self.root.after(40 if ui.prev_img is not None else 90, self.tick)
+        self.redraw()
+        # 16 ms while a transition animates (60 Hz), relaxed otherwise: key presses redraw on
+        # their own (press), the timer only serves the background thread and the game's end.
+        self.root.after(16 if ui.prev_img is not None else 60, self.tick)
 
     def check_crash(self, code):
         """A new report after the game ended: offer to open the folder, copy it or open an issue.
