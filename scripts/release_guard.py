@@ -4,7 +4,8 @@
     release_guard.py [-h|--help] <artefact> [<artefact> ...]
 
 An artefact is a directory, a .zip, a .tar/.tar.gz/.tar.xz or an .AppImage
-(listed through its own --appimage-extract). The list of what is inside is
+(listed with `unsquashfs -o <offset> -l`, never executed;
+needs squashfs-tools). The list of what is inside is
 printed, then checked against names that only exist because of the game:
 generated C (djmax_*.c), ELF/PRX dumps, game data (TPA, PBP, ISO, CSO,
 EBOOT, ICON0.PNG, PARAM.SFO, UMD_DATA.BIN), saves (SD.BIN), the prepared
@@ -22,11 +23,10 @@ rules; they are listed like the rest.)
 import fnmatch
 import os
 import re
-import shutil
+import struct
 import subprocess
 import sys
 import tarfile
-import tempfile
 import zipfile
 from pathlib import Path
 
@@ -37,6 +37,41 @@ FORBIDDEN_NAMES = [
     "emotionalsense", "emotionalsense.exe", "emotionalsense-p3-game", "emotionalsense-p3-game.exe", "libpsprecomp.a", "prepared.json",
 ]
 FORBIDDEN_DIRS = ["disc", "module", "ms", "gen", "savedata", "psp_game"]
+
+
+def appimage_offset(path: Path) -> int:
+    """Offset of the squashfs in a type-2 AppImage: the end of its ELF runtime.
+
+    Only the ELF header is parsed (64-bit little-endian, any machine: x86-64,
+    aarch64), so the file is never executed and its architecture does not matter."""
+    with open(path, "rb") as f:
+        hdr = f.read(64)
+        if len(hdr) < 64 or hdr[:4] != b"\x7fELF" or hdr[4] != 2 or hdr[5] != 1:
+            raise RuntimeError(f"{path}: not a 64-bit little-endian ELF AppImage runtime")
+        shoff, = struct.unpack_from("<Q", hdr, 0x28)
+        shentsize, shnum = struct.unpack_from("<HH", hdr, 0x3A)
+        off = shoff + shentsize * shnum
+        f.seek(off)
+        if f.read(4) != b"hsqs":
+            raise RuntimeError(f"{path}: no squashfs magic at offset {off}")
+    return off
+
+
+def appimage_listing(path: Path):
+    """List an AppImage with unsquashfs, never by running it. Raises on any failure."""
+    off = appimage_offset(path)
+    r = subprocess.run(["unsquashfs", "-o", str(off), "-l", str(path)],
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if r.returncode != 0:
+        raise RuntimeError(f"unsquashfs failed on {path} (rc={r.returncode}): {r.stderr.strip()}")
+    names = []
+    for line in r.stdout.splitlines():
+        if line == "squashfs-root" or not line.startswith("squashfs-root/"):
+            continue
+        names.append(line[len("squashfs-root/"):])
+    if not names:
+        raise RuntimeError(f"unsquashfs listed nothing for {path}")
+    yield from names
 
 
 def listing(path: Path):
@@ -53,15 +88,7 @@ def listing(path: Path):
         with tarfile.open(path) as t:
             yield from t.getnames()
     elif p.endswith(".AppImage"):
-        tmp = tempfile.mkdtemp(prefix="guard-")
-        try:
-            os.chmod(path, 0o755)
-            subprocess.run([str(path.resolve()), "--appimage-extract"], cwd=tmp, check=True,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                           env=dict(os.environ, APPIMAGE_EXTRACT_AND_RUN="1"))
-            yield from listing(Path(tmp) / "squashfs-root")
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        yield from appimage_listing(path)
     else:
         yield path.name
 
