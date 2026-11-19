@@ -798,7 +798,7 @@ class CrashDialog:
 
     def copy(self):
         try:
-            text = self.report.read_text(encoding="utf-8", errors="replace")
+            text = self.app.ui.es_main.scrub_paths(self.report.read_text(encoding="utf-8", errors="replace"))
             self.app.root.clipboard_clear()
             self.app.root.clipboard_append(text)
             self.status.config(text=t("crash.copied"))

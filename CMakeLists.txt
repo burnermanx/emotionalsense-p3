@@ -58,6 +58,9 @@ if(NOT CMAKE_CROSSCOMPILING)
     add_executable(test_emit ${PSPRECOMP_DIR}/tests/test_emit.c)
     target_link_libraries(test_emit PRIVATE allegrex_core)
     add_test(NAME emit COMMAND test_emit)
+
+    add_executable(test_crash_scrub game/tests/test_crash_scrub.c)
+    add_test(NAME crash_scrub COMMAND test_crash_scrub)
 endif()
 
 add_subdirectory(game)

@@ -5,6 +5,7 @@
 #endif
 
 #include "crash.h"
+#include "crash_scrub.h"
 
 #include <psprecomp/cpu.h>
 #include <psprecomp/dispatch.h>
@@ -85,16 +86,9 @@ static void ap_x(uint64_t v, int digits) {
     ap_n("0x", 2);
     for (int i = digits - 1; i >= 0; i--) ap_c(hx[(v >> (4 * i)) & 15]);
 }
-/* Text with the user's home folder replaced by ~ and control characters dropped. */
-static void ap_scrub(const char *s, size_t n) {
-    size_t hl = strlen(g_home);
-    for (size_t i = 0; i < n && s[i]; ) {
-        if (hl >= 3 && i + hl <= n && !strncmp(s + i, g_home, hl)) { ap_c('~'); i += hl; continue; }
-        unsigned char ch = (unsigned char)s[i++];
-        if (ch == '\\' ) ap_c('/');       /* one path style in the report */
-        else if (ch >= 32 || ch == '\t') ap_c((char)ch);
-    }
-}
+static void ap_scrub_emit(char c, void *ctx) { (void)ctx; ap_c(c); }
+/* Text with the user's name/home folder replaced by ~ and control characters dropped. */
+static void ap_scrub(const char *s, size_t n) { es_scrub(s, n, g_home, ap_scrub_emit, NULL); }
 static const char *base_name(const char *p) {
     const char *b = p;
     for (; *p; p++) if (*p == '/' || *p == '\\') b = p + 1;
@@ -708,7 +702,6 @@ void es_crash_init(const char *data) {
         getenv("HOME");
 #endif
     if (home && strlen(home) > 2 && strlen(home) < sizeof g_home) snprintf(g_home, sizeof g_home, "%s", home);
-    /* a Windows home printed with forward slashes by ap_scrub: match both */
     snprintf(g_dir, sizeof g_dir, "%s/crashes", data);
 #ifdef _WIN32
     CreateDirectoryA(g_dir, NULL);

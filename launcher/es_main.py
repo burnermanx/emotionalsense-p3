@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -117,6 +118,19 @@ def crash_reports(data: Path) -> list:
     return sorted((data / "crashes").glob("crash-*.txt"))
 
 
+_USER_DIR = re.compile(r"(?i)((?:^|[\\/])(?:home|users)[\\/])[^\\/]+")
+
+
+def scrub_paths(text: str) -> str:
+    """Hide the user name in paths (/home/<n>, /Users/<n>, C:\\Users\\<n>, Z:/home/<n>) and the
+    home folder itself, so nothing personal reaches a public issue. Same rule as the game's
+    crash reports."""
+    home = str(Path.home())
+    if len(home) >= 3:
+        text = text.replace(home, "~").replace(home.replace("\\", "/"), "~")
+    return _USER_DIR.sub(lambda m: m.group(1).replace("\\", "/") + "~", text)
+
+
 def crash_summary(path: Path) -> dict:
     """The header fields of a report (kind, version, os, renderer, gpu, scene...)."""
     info: dict = {}
@@ -128,7 +142,7 @@ def crash_summary(path: Path) -> dict:
                 continue
             k, _, v = line.partition(": ")
             if v and k not in info:
-                info[k] = v
+                info[k] = scrub_paths(v)
     except OSError:
         pass
     return info

@@ -150,6 +150,9 @@ for 20 s) writes a report too, and the game keeps running.
   [`docs/audio.md`](docs/audio.md).
 - **The unlock changed my save**: that is documented above; restore `SD.BIN` from
   `save-backups/`.
+- **A "No Memory Stick Duo has been inserted... Failed to load Install Data" message
+  on the first run**: expected on a brand-new save. The game then shows its tutorial.
+  Data Install is not needed; nothing is wrong.
 - Open an issue with the crash report for anything else.
 
 ## Command line
