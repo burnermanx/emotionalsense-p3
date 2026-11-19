@@ -58,6 +58,31 @@ def copy_tree(src: Path, dst: Path, ignore=None):
     shutil.copytree(src, dst, symlinks=True, ignore=ignore)
 
 
+def add_multiarch_sdl_headers(sdl: Path, dst: Path, extra=()):
+    """Debian/Ubuntu split SDL2's headers: /usr/include/SDL2/SDL_config.h is a wrapper that
+    includes <SDL2/_real_SDL_config.h>, which lives in /usr/include/<multiarch>/SDL2/. Copy those
+    arch-specific files next to the others so the kit's include path finds them. Sources, in order:
+    --sdl2-arch-include dirs, <prefix>/include/*/SDL2, /usr/include/<cc -print-multiarch>/SDL2."""
+    cands = [Path(e) for e in extra]
+    cands += sorted(p for p in (sdl / "include").glob("*/SDL2") if p.is_dir())
+    try:
+        ma = subprocess.run(["cc", "-print-multiarch"], capture_output=True, text=True).stdout.strip()
+    except OSError:
+        ma = ""
+    if ma:
+        cands.append(Path("/usr/include") / ma / "SDL2")
+    for c in cands:
+        if c.is_dir():
+            for f in sorted(c.iterdir()):
+                if f.is_file() and not (dst / f.name).exists():
+                    shutil.copy2(f, dst / f.name)
+    cfg = dst / "SDL_config.h"
+    if cfg.exists() and "_real_SDL_config.h" in cfg.read_text(errors="replace") \
+            and not (dst / "_real_SDL_config.h").exists():
+        sys.exit("make_kit: SDL_config.h is a multiarch wrapper but _real_SDL_config.h was not found "
+                 "(pass --sdl2-arch-include /usr/include/<triplet>/SDL2)")
+
+
 def make_windows_resource(compiler: Path, dst: Path, triple: str = "x86_64-w64-mingw32"):
     """The game .exe's icon and version info (Task Manager shows FileDescription),
     compiled with the full toolchain's windres to one COFF object the link adds.
@@ -117,6 +142,8 @@ def main() -> int:
     ap.add_argument("--allegrexrecomp", help="prebuilt recompiler; omitted = build it with the kit's own compiler")
     ap.add_argument("--pspdecrypt", required=True)
     ap.add_argument("--vulkan-lib", help="windows: libvulkan-1.a import library")
+    ap.add_argument("--sdl2-arch-include", action="append", default=[],
+                    help="linux: extra arch-specific SDL2 header dir (Debian multiarch), repeatable")
     ap.add_argument("--sdl3", help="linux: libSDL3.so.0 that sdl2-compat loads (optional)")
     a = ap.parse_args()
 
@@ -150,6 +177,7 @@ def main() -> int:
     check_lgpl(ff)
     copy_tree(sdl / "include" / "SDL2" if (sdl / "include" / "SDL2").exists() else sdl / "include",
               deps / "include" / "SDL2")
+    add_multiarch_sdl_headers(sdl, deps / "include" / "SDL2", a.sdl2_arch_include)
     for sub in ("libavcodec", "libavutil", "libswresample"):
         copy_tree(ff / "include" / sub, deps / "include" / sub)
     # 4. compiler

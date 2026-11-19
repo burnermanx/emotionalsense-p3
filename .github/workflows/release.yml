@@ -172,8 +172,11 @@ jobs:
           mkdir -p sdlp/include sdlp/lib
           ln -s /usr/include/SDL2 sdlp/include/SDL2
           cp -P /usr/lib/${{ matrix.libdir }}/libSDL2-2.0.so* sdlp/lib/
+          # Debian/Ubuntu keep _real_SDL_config.h in the multiarch include dir
+          ls /usr/include/${{ matrix.libdir }}/SDL2/_real_SDL_config.h
           python scripts/make_kit.py --target ${{ matrix.target }} --out kit \
             --compiler "dl/zig-${{ matrix.zig_host }}-linux-${ZIG_VERSION}" --sdl2 sdlp \
+            --sdl2-arch-include /usr/include/${{ matrix.libdir }}/SDL2 \
             --ffmpeg "dl/ffmpeg-${FFMPEG_BUILD}-${{ matrix.ffmpeg_asset }}-lgpl-shared-8.1" \
             --pspdecrypt tools-src/pspdecrypt/pspdecrypt
 
