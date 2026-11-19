@@ -154,9 +154,69 @@ def default_kit() -> Path:
     return here.parent / "kit"
 
 
+# -- data and game folders that are already on disk -----------------------------
+
+# The files of the disc the game and the build read (the disc's icons and UMD_DATA.BIN are copied too
+# when present, but nothing depends on them).
+DISC_REQUIRED = ("PSP_GAME/PARAM.SFO", "PSP_GAME/SYSDIR/EBOOT.BIN", "PSP_GAME/INSDIR/DATA.TPA",
+                 "PSP_GAME/INSDIR/STREAMI.TPA", "PSP_GAME/INSDIR/STREAMS.TPA", "PSP_GAME/USRDIR/STREAMV.TPA")
+
+
+def check_disc_tree(root: Path) -> Optional[str]:
+    """None when `root` (the folder that holds PSP_GAME) is the extracted game ULKS46236 with every
+    file the build and the game read; else why not (a short English phrase for logs)."""
+    for rel in DISC_REQUIRED:
+        f = root / rel
+        try:
+            if not f.is_file() or f.stat().st_size == 0:
+                return f"missing or empty: {rel}"
+        except OSError as e:
+            return f"{rel}: {e}"
+    try:
+        sfo = parse_sfo((root / "PSP_GAME" / "PARAM.SFO").read_bytes())
+    except (OSError, ValueError, KeyError, IndexError):
+        return "unreadable PARAM.SFO"
+    if sfo.get("DISC_ID") != GAME_ID:
+        return f"another game: {sfo.get('DISC_ID', '?')}"
+    return None
+
+
+def find_game_folder(base: Path, skip: tuple = ()) -> Optional[Path]:
+    """An extracted game folder next to the program: `base` itself, or a folder inside it (two levels)
+    that holds PSP_GAME/PARAM.SFO. Returns the folder that holds PSP_GAME when it passes
+    check_disc_tree; a folder with another game or missing files is not offered."""
+    def subdirs(d: Path) -> list:
+        try:
+            return sorted(x for x in d.iterdir() if x.is_dir() and x.name not in skip)
+        except OSError:
+            return []
+    cands = [base]
+    for d in subdirs(base):
+        cands.append(d)
+        cands.extend(subdirs(d))
+    for d in cands:
+        try:
+            if (d / "PSP_GAME" / "PARAM.SFO").is_file() and check_disc_tree(d) is None:
+                return d
+        except OSError:
+            continue
+    return None
+
+
+def data_ready(data: Path) -> bool:
+    """The data folder already holds the extracted disc (marker + files): the ISO is not needed
+    again, only the steps after the extraction are."""
+    try:
+        json.loads((data / ".extracted.json").read_text())
+    except (OSError, ValueError):
+        return False
+    return check_disc_tree(data / "disc") is None
+
+
+
 @dataclass
 class PrepareOptions:
-    iso: Path
+    iso: Optional[Path]          # an image (.iso/.chd/.cso), a folder that holds PSP_GAME, or None = the disc already in <data>/disc
     data_dir: Path = field(default_factory=user_data_dir)
     kit_dir: Path = field(default_factory=default_kit)
     jobs: int = os.cpu_count() or 4
@@ -262,8 +322,39 @@ class Preparer:
 
     # -- steps ---------------------------------------------------------------
 
+    @property
+    def source_folder(self) -> Optional[Path]:
+        i = self.o.iso
+        return Path(i) if i is not None and str(i) != "." and Path(i).is_dir() else None
+
     def verify(self) -> dict:
         self._begin("verify")
+        if self.o.iso is None:                    # the data folder already holds the extracted disc
+            reason = None if data_ready(self.data) else "no extracted disc in the data folder"
+            if reason:
+                raise PipelineError(es_i18n.t("err.not_iso"))
+            stamp = json.loads((self.data / ".extracted.json").read_text())
+            try:
+                old = json.loads(self.state_file.read_text()).get("iso", {})
+            except (OSError, ValueError):
+                old = {}
+            self.log("using the disc already extracted in " + str(self.data / "disc"))
+            return {"size": old.get("size", 0), "sha256": stamp.get("sha256", ""), "disc_id": GAME_ID,
+                    "title": old.get("title", GAME_TITLE)}
+        folder = self.source_folder
+        if folder is not None:                    # an extracted game folder: checked, then copied by extract()
+            reason = check_disc_tree(folder)
+            if reason:
+                raise PipelineError(es_i18n.t("err.folder_incomplete", path=str(folder), what=reason))
+            files = sorted(p for p in (folder / "PSP_GAME").rglob("*") if p.is_file())
+            total = sum(p.stat().st_size for p in files)
+            h = hashlib.sha256()
+            for p in files:
+                h.update(f"{p.relative_to(folder).as_posix()}:{p.stat().st_size}\n".encode())
+            sfo = parse_sfo((folder / "PSP_GAME" / "PARAM.SFO").read_bytes())
+            self.log(f"folder: {folder}")
+            return {"size": total, "sha256": "folder-" + h.hexdigest(), "disc_id": GAME_ID,
+                    "title": sfo.get("TITLE", GAME_TITLE)}
         iso = Iso9660(self.o.iso)
         try:
             entries = {e.path: e for e in iso.walk()}
@@ -312,6 +403,36 @@ class Preparer:
                     return
             except ValueError:
                 pass
+        if self.o.iso is None:
+            return
+        folder = self.source_folder
+        if folder is not None:                    # copy, never move: the user's folder stays as it is
+            files = [p for p in sorted(folder.rglob("*")) if p.is_file()
+                     and p.relative_to(folder).parts[0] in ("PSP_GAME", "UMD_DATA.BIN")]
+            total = sum(p.stat().st_size for p in files) or 1
+            done = 0
+            for p in files:
+                dest = disc / p.relative_to(folder)
+                if not (dest.exists() and dest.stat().st_size == p.stat().st_size):
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    tmp = dest.with_name(dest.name + ".part")
+                    with open(p, "rb") as src, open(tmp, "wb") as out:
+                        while True:
+                            b = src.read(8 << 20)
+                            if not b:
+                                break
+                            out.write(b)
+                            done += len(b)
+                            self._frac(done / total, "")
+                            if self.cancelled():
+                                raise PipelineError(es_i18n.t("err.cancelled"))
+                    os.replace(tmp, dest)
+                else:
+                    done += p.stat().st_size
+                    self._frac(done / total, "")
+            (self.data / "ms").mkdir(parents=True, exist_ok=True)
+            marker.write_text(json.dumps(stamp))
+            return
         iso = Iso9660(self.o.iso)
         try:
             entries = [e for e in iso.walk() if not e.is_dir]

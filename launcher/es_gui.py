@@ -234,6 +234,24 @@ class Ui:
             img.alpha_composite(self.text(t("welcome.update_soon"), 17, th.DIM), (56, H - 78))
         self._footer(img, back=False)
 
+    def discover_sources(self, base=None):
+        """Nothing to ask when the disc is already on disk: "data" = <data>/disc holds the extracted
+        disc (only the steps after the extraction are needed), "folder" = an extracted game folder
+        next to the program (offered as the source, copied, never moved), else None."""
+        if self.es_prepare_ready():
+            return None
+        if self.es_prepare.data_ready(self.data):
+            return "data"
+        import es_portable
+        f = self.es_prepare.find_game_folder(base or es_portable.app_dir(), skip=(es_portable.DATA_NAME,))
+        if f is None:
+            return None
+        self.iso = f
+        self.iso_status = ("ok", t("welcome.folder_found", name=f.name))
+        self.sel["setup"] = 2
+        self.dirty = True
+        return "folder"
+
     def es_prepare_ready(self) -> bool:
         try:
             return self.es_prepare.Preparer(self.es_prepare.PrepareOptions(
@@ -553,8 +571,10 @@ class Ui:
 
     def set_iso(self, p: Path):
         from es_chd import ChdError
+        from es_cso import CsoError
         from es_pipeline import GAME_ID, Iso9660, PipelineError, parse_sfo
         self.iso = p
+        self.dirty = True        # the dialog's own redraws cleared it: the result must be drawn on return
         try:
             iso = Iso9660(p)
             try:
@@ -568,7 +588,7 @@ class Ui:
                 iso.close()
         except (OSError, PipelineError, struct_error) as e:
             msg = str(e)
-            if isinstance(e, ChdError):                  # already a full, translated sentence
+            if isinstance(e, (ChdError, CsoError)):      # already a full, translated sentence
                 self.iso_status = ("err", msg)
             else:
                 self.iso_status = ("err", t("welcome.not_psp") if "ISO9660" in msg else t("welcome.unreadable", error=msg))
@@ -636,6 +656,13 @@ class App:
         self.set_confirm(ui.confirm_mode())
         if ui.es_prepare_ready():
             ui.screen = "play"
+        else:
+            try:
+                src = ui.discover_sources()
+            except Exception:                  # noqa: BLE001  looking around must never stop the launcher
+                src = None
+            if src == "data":                  # the disc is already extracted here: no image, no extraction
+                self.root.after(50, lambda: self.start_prepare(None))
         self.tick()
         if self.pad.available:
             self.pad_tick()
@@ -644,6 +671,7 @@ class App:
         """A key (keyboard or pad): act now and redraw at once (idle callbacks coalesce a burst
         into one frame), not at the next timer tick."""
         self.ui.key(k, self)
+        self.ui.dirty = True       # a system dialog inside key() may have redrawn (and cleared it) meanwhile
         self.root.after_idle(self.redraw)
 
     def redraw(self):
@@ -703,7 +731,7 @@ class App:
 
     def ask_iso(self):
         return self._modal(lambda: self.fd.askopenfilename(
-            title=t("welcome.browse"), filetypes=[("ISO / CHD", "*.iso *.ISO *.chd *.CHD *.cso"), ("*", "*")]))
+            title=t("welcome.browse"), filetypes=[("ISO / CHD / CSO", "*.iso *.ISO *.chd *.CHD *.cso *.CSO"), ("*", "*")]))
 
     def ask_dir(self):
         return self._modal(lambda: self.fd.askdirectory(title=t("options.texture_pack")))
@@ -713,7 +741,7 @@ class App:
             self.ui.running.terminate()
         self.root.destroy()
 
-    def start_prepare(self, iso: Path):
+    def start_prepare(self, iso: Optional[Path]):
         ui = self.ui
         ui.progress, ui.step, ui.message, ui.cancel_flag = 0.0, "verify", "", False
         ui.goto("loading")

@@ -10,8 +10,20 @@ build the rest from your own disc.
 
 ## [Unreleased]
 
+### Added
+
+- **CSO images** (CISO v1/v2, as made by PPSSPP/maxcso/ciso) are read by sector like CHD, with no
+  temporary ISO (`launcher/es_cso.py`; byte-for-byte test against the ISO). ZSO (LZ4) is recognised
+  and refused with a clear message in five languages.
+- **Already extracted data is reused**: a data folder that holds the extracted disc is not asked
+  for an image again (a new launcher version only redoes the steps after the extraction), and an
+  extracted game folder (`PSP_GAME` of ULKS46236) next to the program is offered as the source: it is
+  checked and copied, never moved or changed. Incomplete or wrong folders are refused with the reason.
+
 ### Fixed
 
+- The game is recognised as soon as the file dialog returns (the screen was only redrawn after the
+  next key or pad press).
 - **Vulkan start-up is now visible and no longer exposed to Steam's layers/runtime** (Steam Deck):
   the game writes `<data>/logs/renderer.log` on every start (which renderer, the relevant
   environment, each Vulkan step with its `VkResult`); when Vulkan does not start the launcher

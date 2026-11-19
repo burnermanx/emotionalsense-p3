@@ -94,9 +94,10 @@ class Iso9660:
     def __init__(self, path: Path):
         self.path = Path(path)
         import es_chd
-        self.f = es_chd.open_image(self.path)        # the ISO itself, or a CHD read sector by sector
+        self.f = es_chd.open_image(self.path)        # the ISO itself, or a CHD/CSO read sector by sector
         pvd = self._read(16 * SECTOR, SECTOR)
         if pvd[1:6] != b"CD001" or pvd[0] != 1:
+            self.f.close()
             raise PipelineError(f"{self.path} is not an ISO9660 image")
         root = pvd[156:156 + 34]
         self.root_lba = struct.unpack_from("<I", root, 2)[0]

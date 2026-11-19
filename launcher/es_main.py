@@ -300,7 +300,7 @@ def _show_error(msg: str) -> None:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="EmotionalSense-P3", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--iso", type=Path, help="the game image: an .iso, or a .chd (chdman createdvd/createcd)")
+    ap.add_argument("--iso", type=Path, help="the game image: an .iso, .chd (chdman createdvd/createcd) or .cso, or a folder that holds the extracted PSP_GAME")
     ap.add_argument("--prepare", action="store_true", help="prepare the game (needs --iso the first time)")
     ap.add_argument("--run", action="store_true", help="run the prepared game")
     ap.add_argument("--backup-save", action="store_true")
@@ -435,8 +435,15 @@ def main(argv=None) -> int:
                 if prep.is_prepared():
                     vlog(t("cli.prepared", path=prep.game_exe()))
                     return 0
-                print(t("cli.iso_required"), file=sys.stderr)
-                return 2
+                if es_prepare.data_ready(data):          # the disc is already extracted here: no image needed
+                    prep.o.iso = None
+                else:
+                    import es_portable
+                    folder = es_prepare.find_game_folder(es_portable.app_dir(), skip=(es_portable.DATA_NAME,))
+                    if folder is None:
+                        print(t("cli.iso_required"), file=sys.stderr)
+                        return 2
+                    prep.o.iso = folder                  # an extracted game folder next to the program (copied)
             t0 = time.time()
             try:
                 exe = prep.run()

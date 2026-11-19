@@ -337,11 +337,14 @@ def open_image(path, kit: Optional[Path] = None):
     use image_size()."""
     if is_chd(path) or is_chd_name(path):
         return ChdFile(path, kit)
+    import es_cso
+    if es_cso.is_cso(path):                       # CSO / ZSO, by content
+        return es_cso.CsoFile(path)
     return open(path, "rb")
 
 
 def image_size(f) -> int:
-    if isinstance(f, ChdFile):
+    if isinstance(f, ChdFile) or hasattr(f, "zso"):
         return f.size
     cur = f.tell()
     f.seek(0, 2)
