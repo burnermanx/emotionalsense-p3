@@ -3,6 +3,7 @@ import json
 import re
 import sys
 import unittest
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -128,6 +129,71 @@ class SteamGameMode(unittest.TestCase):
     def test_steam_beats_plasma(self):
         h = self.home("brazilian", plasma="[Translations]\nLANGUAGE=ko\n")
         self.assertEqual(es_i18n.detect(self.GAME, "linux", h), "pt-BR")
+
+class ProtonLanguage(SteamGameMode):
+    """The Windows build under Wine/Proton: host variables reach the process, the host
+    home is read through a Unix root (Z:\\ in real life, a temp dir here)."""
+    PROTON = {"LANG": "en_US.UTF-8", "SteamAppId": "123", "HOME": "/home/deck",
+              "STEAM_COMPAT_CLIENT_INSTALL_PATH": "/home/deck/.local/share/Steam"}
+
+    def root(self, lang=None, **kw):
+        r = self.home()
+        (r / "home/deck").mkdir(parents=True)
+        h = r / "home/deck"
+        if lang is not None or kw:
+            (h / ".steam").mkdir()
+            (h / ".steam/registry.vdf").write_text(kw.get("raw") or self.VDF % lang)
+        if kw.get("plasma"):
+            (h / ".config").mkdir()
+            (h / ".config/plasma-localerc").write_text(kw["plasma"])
+        return r
+
+    def det(self, env, root, wine=True):
+        with mock.patch.object(es_i18n, "_windows", return_value="en"):
+            return es_i18n.detect(env, "win32", wine=wine, unix_root=root)
+
+    def test_registry_through_unix_root(self):
+        for name, code in (("brazilian", "pt-BR"), ("koreana", "ko"), ("latam", "es")):
+            self.assertEqual(self.det(self.PROTON, self.root(name)), code)
+
+    def test_home_from_compat_path_only(self):
+        env = {k: v for k, v in self.PROTON.items() if k != "HOME"}
+        self.assertEqual(self.det(env, self.root("japanese")), "ja")
+
+    def test_wine_host_variables(self):
+        env = {"LANG": "en_US.UTF-8", "WINE_HOST_HOME": "/home/deck", "WINE_HOST_XDG_CURRENT_DESKTOP": "gamescope"}
+        self.assertEqual(self.det(env, self.root("koreana")), "ko")
+        env = {"LANG": "en_US.UTF-8", "WINE_HOST_HOME": "/home/deck", "WINE_HOST_XDG_CURRENT_DESKTOP": "KDE"}
+        self.assertEqual(self.det(env, self.root("koreana")), "en")
+
+    def test_upper_cased_names_like_windows(self):
+        env = {k.upper(): v for k, v in self.PROTON.items()}
+        self.assertEqual(self.det(env, self.root("brazilian")), "pt-BR")
+
+    def test_env_language_wins(self):
+        env = dict(self.PROTON, SteamGameLanguage="spanish")
+        self.assertEqual(self.det(env, self.root("brazilian")), "es")
+
+    def test_plasma_then_wine_locale(self):
+        self.assertEqual(self.det(self.PROTON, self.root(plasma="[Formats]\nLANG=pt_BR.UTF-8\n")), "pt-BR")
+        self.assertEqual(self.det(self.PROTON, self.root()), "en")
+        with mock.patch.object(es_i18n, "_windows", return_value="ko"):
+            self.assertEqual(es_i18n.detect(self.PROTON, "win32", wine=True, unix_root=self.root()), "ko")
+
+    def test_real_windows_and_no_steam_unchanged(self):
+        self.assertEqual(self.det(self.PROTON, self.root("brazilian"), wine=False), "en")
+        env = {"LANG": "en_US.UTF-8", "HOME": "/home/deck"}
+        self.assertEqual(self.det(env, self.root("brazilian")), "en")
+
+    def test_corrupt_falls_back(self):
+        self.assertEqual(self.det(self.PROTON, self.root(raw="\x00{{")), "en")
+
+    def test_under_wine_matches_host(self):
+        import ctypes
+        if sys.platform.startswith("win"):               # real Windows: False; Wine/Proton: True
+            self.assertEqual(es_i18n.under_wine(), hasattr(ctypes.windll.ntdll, "wine_get_version"))
+        else:
+            self.assertFalse(es_i18n.under_wine())
 
 
 if __name__ == "__main__":

@@ -132,19 +132,98 @@ def plasma_language(home: Optional[Path] = None) -> Optional[str]:
     return normalize(vals.get("LANG"))
 
 
+class _CIEnv(dict):
+    """Case-insensitive view for Windows (os.environ upper-cases names there), with the
+    host's variables Wine hands over as WINE_HOST_<name> filling in the missing ones."""
+    def __init__(self, env: Mapping[str, str]):
+        super().__init__()
+        for k, v in env.items():
+            if k.upper().startswith("WINE_HOST_"):
+                self.setdefault(k[10:].upper(), v)
+        for k, v in env.items():
+            self[k.upper()] = v
+
+    def get(self, k, d=None):
+        return super().get(k.upper(), d)
+
+    def __getitem__(self, k):
+        return super().__getitem__(k.upper())
+
+
+def under_wine() -> bool:
+    """Wine/Proton: ntdll exports wine_get_version (it does not exist on real Windows)."""
+    try:
+        import ctypes
+        getattr(ctypes.windll.ntdll, "wine_get_version")      # type: ignore[attr-defined]
+        return True
+    except Exception:
+        return False
+
+
+# Variables a Steam-launched process might carry with the language (none is
+# documented; read if present, harmless when absent).
+_STEAM_LANG_ENV = ("SteamGameLanguage", "SteamClientLanguage", "STEAM_LANGUAGE")
+
+
+def steam_env_language(env: Mapping[str, str]) -> Optional[str]:
+    for k in _STEAM_LANG_ENV:
+        n = _STEAM.get(env.get(k, "").strip().lower())
+        if n:
+            return n
+    return None
+
+
+def _host_dirs(env: Mapping[str, str], unix_root: Optional[Path] = None) -> list:
+    """Candidate home folders of the Linux host as seen from a Wine process
+    (Unix path /home/u -> Z:/home/u, or unix_root/home/u when given, for tests)."""
+    def conv(u: str) -> Path:
+        if unix_root is not None:
+            return unix_root / u.lstrip("/")
+        return Path("Z:" + u)
+    out = []
+    for h in (env.get("HOME", ""), env.get("WINE_HOST_HOME", "")):
+        if h.startswith("/"):
+            out.append(conv(h))
+    wh = env.get("WINEHOMEDIR", "")                       # \\??\\Z:\\home\\user, set by Wine
+    if wh.startswith("\\??\\") and unix_root is None:
+        out.append(Path(wh[4:]))
+    for var in ("STEAM_COMPAT_CLIENT_INSTALL_PATH", "STEAM_COMPAT_DATA_PATH"):
+        v = env.get(var, "").rstrip("/")
+        for marker in ("/.local/share/Steam", "/.steam/", "/.steam", "/steamapps/"):
+            i = v.find(marker)
+            if i > 0 and v.startswith("/"):
+                out.append(conv(v[:i]))
+                break
+    seen, res = set(), []
+    for p in out:
+        if str(p) not in seen:
+            seen.add(str(p))
+            res.append(p)
+    return res
+
+
 def detect(env: Optional[Mapping[str, str]] = None, platform: Optional[str] = None,
-           home: Optional[Path] = None) -> str:
+           home: Optional[Path] = None, wine: Optional[bool] = None,
+           unix_root: Optional[Path] = None) -> str:
     real = env is None
     env = os.environ if env is None else env
     platform = platform or sys.platform
     code = None
     if platform.startswith("win"):
-        code = _windows()
+        if wine is None:
+            wine = under_wine()
+        if wine:                                        # Wine hands the host's variables over as WINE_HOST_*
+            env = _CIEnv(env)
+        if wine and steam_session(env):                 # Proton: host LANG is the system default
+            code = steam_env_language(env)
+            for d in ([home] if home else _host_dirs(env, unix_root)):
+                code = code or steam_language(d) or plasma_language(d)
+        code = code or _windows()
         if not code:                                    # Wine without the API, tests
             code = _posix(env)
     else:
         if steam_session(env):                          # Game Mode: LANG is the system default
-            code = steam_language(home) or plasma_language(home)
+            code = steam_env_language(env) or steam_language(home) or plasma_language(home)
         code = code or _posix(env)
         if not code and real:
             try:

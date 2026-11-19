@@ -50,20 +50,56 @@ static int g_enabled = 1;
 void es_exit_set_confirm_cross(int cross) { g_confirm_cross = cross != 0; }
 void es_exit_enable(int on) { g_enabled = on; }
 
-#ifndef _WIN32
+#ifdef _WIN32
+#include <windows.h>
+/* Wine/Proton: ntdll exports wine_get_version (real Windows does not). */
+static int under_wine(void) {
+    HMODULE n = GetModuleHandleA("ntdll.dll");
+    return n && GetProcAddress(n, "wine_get_version") != NULL;
+}
+#endif
+
 /* Steam Game Mode (gamescope) keeps LANG at the system default; the language the
  * user chose is the Steam client's, in ~/.steam/registry.vdf ("language"). Same
  * order as launcher/es_i18n.py. Returns a language index or -1. */
+static const char *henv(const char *n) {      /* Wine also exposes the host's as WINE_HOST_<n> */
+    const char *v = getenv(n);
+    if (v && *v) return v;
+#ifdef _WIN32
+    char b[96];
+    snprintf(b, sizeof b, "WINE_HOST_%s", n);
+    v = getenv(b);
+    if (v && *v) return v;
+#endif
+    return NULL;
+}
+
 static int steam_lang(void) {
-    if (!getenv("SteamDeck") && !getenv("SteamGamepadUI") && !getenv("SteamOS") &&
-        !getenv("GAMESCOPE_WAYLAND_DISPLAY") && !getenv("SteamAppId") && !getenv("SteamGameId"))
-        return -1;
-    const char *h = getenv("HOME");
+    const char *pre = "";
+#ifdef _WIN32
+    if (!under_wine()) return -1;      /* real Windows: nothing changes */
+    pre = "Z:";                        /* the Unix HOME seen from Wine */
+#endif
+    const char *e = henv("SteamGameLanguage");
+    if (e && *e) {
+        if (!strncmp(e, "brazilian", 9) || !strncmp(e, "portuguese", 10)) return 1;
+        if (!strncmp(e, "spanish", 7) || !strncmp(e, "latam", 5)) return 2;
+        if (!strncmp(e, "japanese", 8)) return 3;
+        if (!strncmp(e, "koreana", 7)) return 4;
+        if (!strncmp(e, "english", 7)) return 0;
+    }
+    static const char *const sv[] = { "SteamDeck", "SteamGamepadUI", "SteamOS", "GAMESCOPE_WAYLAND_DISPLAY",
+                                      "SteamAppId", "SteamGameId", "STEAM_COMPAT_DATA_PATH" };
+    int sess = 0;
+    for (int i = 0; i < 7 && !sess; i++) sess = henv(sv[i]) != NULL;
+    const char *xd = henv("XDG_CURRENT_DESKTOP");
+    if (!sess && !(xd && strstr(xd, "gamescope"))) return -1;
+    const char *h = henv("HOME");
     if (!h || !*h) return -1;
     static const char *const rel[] = { "/.steam/registry.vdf", "/.local/share/Steam/registry.vdf" };
     for (int r = 0; r < 2; r++) {
         char path[1024];
-        snprintf(path, sizeof path, "%s%s", h, rel[r]);
+        snprintf(path, sizeof path, "%s%s%s", pre, h, rel[r]);
         FILE *f = fopen(path, "r");
         if (!f) continue;
         char line[512];
@@ -86,14 +122,11 @@ static int steam_lang(void) {
     }
     return -1;
 }
-#endif
 
 static int pick_lang(void) {
     const char *v = getenv("EMOTIONALSENSE_LANG");
     if (!v || !*v || !strcmp(v, "auto")) {
-#ifndef _WIN32
         { int sl = steam_lang(); if (sl >= 0) return sl; }
-#endif
         static const char *const names[] = { "LC_ALL", "LC_MESSAGES", "LANG" };
         v = NULL;
         for (int i = 0; i < 3 && !v; i++) {
