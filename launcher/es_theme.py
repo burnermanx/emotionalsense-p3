@@ -47,11 +47,12 @@ def _lerp(a: Color, b: Color, t: float) -> Color:
 
 
 def vgradient(w: int, h: int, stops) -> Image.Image:
-    """stops: [(pos 0..1, (r,g,b[,a])), ...] top to bottom."""
-    img = Image.new("RGBA", (w, h))
-    px = img.load()
+    """stops: [(pos 0..1, (r,g,b[,a])), ...] top to bottom. One colour per row, built as a
+    1-pixel-wide column and stretched (a per-pixel Python loop took ~50 ms for a panel)."""
+    col = []
     for y in range(h):
         t = y / max(1, h - 1)
+        c = (0, 0, 0, 0)
         for i in range(len(stops) - 1):
             p0, c0 = stops[i]
             p1, c1 = stops[i + 1]
@@ -61,10 +62,11 @@ def vgradient(w: int, h: int, stops) -> Image.Image:
                           for k in range(len(c0)))
                 if len(c) == 3:
                     c = c + (255,)
-                for x in range(w):
-                    px[x, y] = c
                 break
-    return img
+        col.append(c)
+    column = Image.new("RGBA", (1, max(1, h)))
+    column.putdata(col)
+    return column.resize((w, h), Image.Resampling.NEAREST) if w != 1 else column
 
 
 def hgradient(w: int, h: int, stops) -> Image.Image:
@@ -165,8 +167,22 @@ def render_select_band(w: int = 600, h: int = 50) -> Image.Image:
     return out
 
 
+_panel_cache: dict = {}
+
+
 def render_panel(w: int, h: int, cut: int = 16, accent: Color = CYAN) -> Image.Image:
-    """Dark panel with chamfered corners and a gradient frame."""
+    """Dark panel with chamfered corners and a gradient frame (cached: it is composited,
+    never modified, and drawing it from scratch costs ~100 ms)."""
+    key = (w, h, cut, tuple(accent))
+    im = _panel_cache.get(key)
+    if im is None:
+        if len(_panel_cache) > 64:
+            _panel_cache.clear()
+        im = _panel_cache[key] = _render_panel(w, h, cut, accent)
+    return im
+
+
+def _render_panel(w: int, h: int, cut: int, accent: Color) -> Image.Image:
     s = 3
     big = Image.new("RGBA", (w * s, h * s), (0, 0, 0, 0))
     poly = [(cut * s, 0), ((w - cut) * s, 0), (w * s, cut * s), (w * s, (h - cut) * s),

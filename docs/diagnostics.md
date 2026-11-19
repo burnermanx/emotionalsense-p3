@@ -24,6 +24,23 @@ crash report's "last log lines" are kept with the log **off** as well. Output of
 (Vulkan loader, Mesa, the Gamescope layer) is theirs: it is neither hidden nor changed. Messages go
 to stderr (the former stdout lines too); `--version` and `--help` still print on stdout.
 
+## Sync log (for a timing report)
+
+If the notes drift from the music, run the launcher with `--sync-log` (or with
+`EMOTIONALSENSE_SYNC_LOG=1` in the environment, the way to turn it on from Steam's launch options)
+and play one song. The game's log, with the clock, vblank and audio traces, goes to
+`<data folder>/logs/sync-<time>.log` instead of the terminal, and the user name is scrubbed from it
+when the game ends. It records the machine (CPU, session type, Gamescope, audio driver), the audio
+device the game got, one `clock[...]` line per 60 vblanks (real time, guest time, audio blocks:
+the vblank rate and the drift) and one `audio[...]` line per second and channel. The per-frame
+picture hash of `EMOTIONALSENSE_TRACE_FPS` is left out on purpose: it would load a small CPU and
+change what is being measured.
+
+```
+EmotionalSense-P3 --run --sync-log                        # terminal / Desktop Mode
+EMOTIONALSENSE_SYNC_LOG=1 %command%                       # Steam launch options (Game Mode)
+```
+
 ## Variables
 
 | Variable | Effect | Notes |

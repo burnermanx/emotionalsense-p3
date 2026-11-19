@@ -10,6 +10,28 @@ build the rest from your own disc.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Launcher on Windows (Proton): the menu scrolled by itself.** A gamepad input that is already
+  "pressed" when the controller is first seen (a second, phantom device, a raw HID node) is now
+  ignored until it has been released once, directions are tracked per device with a hysteresis
+  on the stick, the controller list is no longer closed and reopened every second when a raw
+  joystick that is not a game controller is present, and the pad is mute while a system dialog
+  (file picker, crash dialog) is open and until what is held is released afterwards.
+- **Launcher: every screen is as fluid as the options screen.** The panel gradient was drawn
+  pixel by pixel in Python on every frame (60 to 120 ms for the setup, play and loading screens)
+  and is now built per row and cached; a screen change shows its first frame inside one 60 Hz
+  period; transitions are paced at 60 Hz (they ran at about 30); the loading screen follows the
+  worker thread at 8 ms.
+- **Linux: the guest's time base was the system clock (`CLOCK_REALTIME`).** Guest time, frame
+  pacing and the audio grid now use `CLOCK_MONOTONIC`, like the performance counter on Windows,
+  so a time-sync step or a resume cannot move the game's timeline against the music.
+
+### Added
+
+- `--sync-log` / `EMOTIONALSENSE_SYNC_LOG=1`: write the clock, vblank and audio traces to
+  `<data>/logs/sync-<time>.log` for a timing report (see `docs/diagnostics.md`).
+
 ## [0.1.0] - 2026-11-19
 
 First release. DJMAX Portable 3 (`ULKS46236`) boots, plays and saves from your own

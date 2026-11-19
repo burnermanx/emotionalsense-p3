@@ -16,8 +16,9 @@ class FakeSdl:
 def make(held):
     p = es_pad.Pad.__new__(es_pad.Pad)
     p.sdl, p.gcs, p._scan, p._held, p._next, p.confirm_cross = FakeSdl(), [1], 0.0, {}, {}, False
+    p._stuck, p._axis, p._ngc = set(), {}, -1
     p._open = lambda: None
-    p._state = lambda: {k: k in held for k in ("up", "down", "left", "right", "ok", "back")}
+    p._state = lambda: {(0, k): k in held for k in ("up", "down", "left", "right", "ok", "back")}
     return p
 
 
@@ -60,9 +61,9 @@ class PadRepeat(unittest.TestCase):
     def test_release_resets(self):
         p = make({"down"})
         self.assertEqual(p.poll(), ["down"])
-        p._state = lambda: {k: False for k in ("up", "down", "left", "right", "ok", "back")}
+        p._state = lambda: {(0, k): False for k in ("up", "down", "left", "right", "ok", "back")}
         self.assertEqual(p.poll(), [])
-        p._state = lambda: {k: k == "down" for k in ("up", "down", "left", "right", "ok", "back")}
+        p._state = lambda: {(0, k): k == "down" for k in ("up", "down", "left", "right", "ok", "back")}
         self.assertEqual(p.poll(), ["down"])              # a new press is a new first move
 
 

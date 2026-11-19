@@ -210,7 +210,13 @@ class Ui:
     def compose(self) -> Image.Image:
         img = self.assets()["bg"].copy()
         getattr(self, "draw_" + self.screen)(img)
+        self._version_mark(img)
         return img
+
+    def _version_mark(self, img):
+        """Small and dim in the bottom-right corner of every screen."""
+        im = self.text(t("main.version", version=self._version()), 14, th.DIM)
+        img.alpha_composite(im, (W - 24 - im.width, H - 34))
 
     def draw_setup(self, img):
         self._title(img, "SETUP", "GAME ", "DISC", th.LIME)
@@ -259,21 +265,21 @@ class Ui:
     def draw_play(self, img):
         self._title(img, "PLAY", "EMOTIONALSENSE-", "P3", th.CYAN)
         save = self.es_prepare.save_file(self.data)
-        lines = [(t("main.save_path", path=short_path(save.parent, 760, self)), th.WHITE),
-                 (t("main.version", version=self._version()), th.DIM)]
+        lines = [(t("main.save_path", path=short_path(save.parent, 760, self)), th.WHITE)]
         if self.message:
             lines.append((self.message, th.LIME))
         self._panel(img, 56, 176, 848, 24 + len(lines) * 28, lines)
         items = [(t("main.play"), True), (t("main.options"), True), (t("main.save"), True),
                  (t("main.open_save"), True), (t("main.quit"), True)]
-        self._items(img, items, self.sel["play"], y0=268 + max(0, len(lines) - 2) * 28, step=42)
+        self._items(img, items, self.sel["play"], y0=268 + max(0, len(lines) - 1) * 28, step=42)
         self._footer(img, back=False)
 
     def _version(self) -> str:
         try:
             return json.loads((self.kit / "manifest.json").read_text())["version_full"]
-        except (OSError, ValueError):
-            return "?"
+        except (OSError, ValueError, KeyError):
+            import es_version                       # first run, no kit yet: the launcher's own
+            return es_version.VERSION
 
     def options_rows(self):
         c = self.cfg
@@ -618,6 +624,8 @@ class App:
         self.photo = None
         self.q: queue.Queue = queue.Queue()
         self.thread: Optional[threading.Thread] = None
+        self.modal = 0                         # >0 while a dialog is open: the pad must not drive the screen behind
+        self._anim = False                     # a frame is already scheduled for the running transition
         names = {"Up": "up", "Down": "down", "Left": "left", "Right": "right", "Return": "ok",
                  "KP_Enter": "ok", "space": "ok", "Escape": "back", "BackSpace": "back"}
         for ks, nm in names.items():
@@ -643,9 +651,19 @@ class App:
         if not ui.dirty:
             return
         ui.dirty = False
+        t0 = time.perf_counter()
         self.photo = frame_photo(self.tk, ui.frame(), self.photo)
         self.canvas.itemconfig(self.item, image=self.photo)
         self.root.title(t("app.title"))
+        if ui.prev_img is not None and not self._anim:
+            # A transition is running: the next frame is due one 60 Hz period after this one
+            # started (not 16 ms after it ended, which made it ~30 ms a frame).
+            self._anim = True
+            self.root.after(max(1, 16 - int((time.perf_counter() - t0) * 1000)), self._next_anim)
+
+    def _next_anim(self):
+        self._anim = False
+        self.redraw()
 
     def set_confirm(self, mode: str):
         """The pad's south/east buttons follow the confirm setting; so does the footer."""
@@ -656,7 +674,7 @@ class App:
         keys = self.pad.poll()
         # While the game runs the pad belongs to it: the same presses must not
         # also drive (and re-launch from) the hidden launcher.
-        if not self.ui.running:
+        if not self.ui.running and not self.modal:
             for k in keys:
                 self.press(k)
         self.root.after(PAD_POLL_MS, self.pad_tick)
@@ -673,11 +691,22 @@ class App:
         except Exception:                      # noqa: BLE001
             pass
 
+    def _modal(self, fn):
+        """A blocking system dialog: the pad is mute while it is open (the launcher timers
+        keep running under it), and what is held when it closes must be released first."""
+        self.modal += 1
+        try:
+            return fn()
+        finally:
+            self.modal -= 1
+            self.pad.rearm()
+
     def ask_iso(self):
-        return self.fd.askopenfilename(title=t("welcome.browse"), filetypes=[("ISO / CHD", "*.iso *.ISO *.chd *.CHD *.cso"), ("*", "*")])
+        return self._modal(lambda: self.fd.askopenfilename(
+            title=t("welcome.browse"), filetypes=[("ISO / CHD", "*.iso *.ISO *.chd *.CHD *.cso"), ("*", "*")]))
 
     def ask_dir(self):
-        return self.fd.askdirectory(title=t("options.texture_pack"))
+        return self._modal(lambda: self.fd.askdirectory(title=t("options.texture_pack")))
 
     def quit(self):
         if self.ui.running and self.ui.running.poll() is None:
@@ -733,7 +762,7 @@ class App:
             return
         cmd, env = ui.es_main.game_command(prep.game_exe(), ui.data, ui.cfg)
         self.crashes_before = set(ui.es_main.crash_reports(ui.data))
-        ui.running = subprocess.Popen(cmd, env=env)
+        ui.running = ui.es_main.spawn_game(cmd, env, ui.data)
         ui.message = ""
         # Out of the way while the game runs (it may be full screen); tick() brings
         # the launcher back, focused, when the game process ends.
@@ -774,15 +803,21 @@ class App:
             pass
         if ui.running and ui.running.poll() is not None:
             code = ui.running.returncode
+            ui.es_main.finish_game(ui.running)
             ui.running = None
             ui.message = t("main.game_ended", code=code) if code else ""
             ui.dirty = True
+            self.pad.rearm()                   # held while the game had the pad: must be released first
             self.bring_back()
             self.check_crash(code)
-        self.redraw()
+        if not self._anim:                     # a running transition paints on its own 60 Hz schedule
+            self.redraw()
         # 16 ms while a transition animates (60 Hz), relaxed otherwise: key presses redraw on
         # their own (press), the timer only serves the background thread and the game's end.
-        self.root.after(16 if ui.prev_img is not None else 60, self.tick)
+        # 8 ms while a worker thread reports progress (the queue is only read here), 16 ms in a
+        # transition, relaxed on idle screens (a key press redraws on its own).
+        working = ui.screen == "loading" or (ui.screen == "texpack" and ui.tp_state == "working")
+        self.root.after(8 if working else 16 if ui.prev_img is not None else 60, self.tick)
 
     def check_crash(self, code):
         """A new report after the game ended: offer to open the folder, copy it or open an issue.
@@ -810,8 +845,11 @@ class CrashDialog:
         self.top.title(t("crash.title"))
         self.top.resizable(False, False)
         self.top.transient(app.root)
+        app.modal += 1                                   # the pad must not drive the launcher behind
+        self.top.bind("<Destroy>", lambda e: self._closed(e), add="+")
         body = t("crash.body", file=str(report.name), folder=short_path(report.parent, 560))
         tk.Label(self.top, text=body, justify="left", wraplength=560, padx=18, pady=14).pack()
+        tk.Label(self.top, text=t("main.version", version=app.ui._version()), fg="#888", font=("TkDefaultFont", 8)).pack(anchor="e", padx=10)
         row = tk.Frame(self.top)
         row.pack(pady=(0, 14))
         for label, fn in ((t("crash.open_folder"), self.open_folder), (t("crash.copy"), self.copy),
@@ -823,6 +861,11 @@ class CrashDialog:
             self.top.grab_set()
         except Exception:                      # noqa: BLE001
             pass
+
+    def _closed(self, e):
+        if e.widget is self.top and self.app.modal > 0:
+            self.app.modal -= 1
+            self.app.pad.rearm()
 
     def open_folder(self):
         try:
@@ -875,7 +918,7 @@ def offer_migration(data: Path) -> None:
     root.withdraw()
     try:
         es_i18n.set_language(Ui(data, Path("/nonexistent-es-kit")).cfg["language"])
-        if messagebox.askyesno(t("app.title"), t("portable.migrate_ask", path=str(old), dest=str(data))):
+        if messagebox.askyesno(t("app.title") + " " + Ui(data, Path("/nonexistent-es-kit"))._version(), t("portable.migrate_ask", path=str(old), dest=str(data))):
             es_portable.migrate(old, data, log=lambda s: None)
         else:
             marker.write_text("declined\n")

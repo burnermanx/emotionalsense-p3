@@ -75,6 +75,73 @@ def save_config(data: Path, cfg: dict) -> None:
     (data / "launcher.json").write_text(json.dumps(cfg, indent=1))
 
 
+# The sync-collection mode (`--sync-log`, or EMOTIONALSENSE_SYNC_LOG=1 in the environment, which is the
+# way to turn it on from Steam's launch options): the game's diagnostic log with the clock, vblank and audio
+# traces, written to <data>/logs/sync-<time>.log. Only cheap traces: the per-frame picture hash of
+# TRACE_FPS would load a small CPU like the Deck's and disturb what is being measured.
+SYNC_ENV = {"EMOTIONALSENSE_LOG": "1", "EMOTIONALSENSE_TRACE_CLOCK": "1", "EMOTIONALSENSE_TRACE_AUDIO": "1"}
+
+
+def sync_log_wanted(flag: bool = False) -> bool:
+    v = os.environ.get("EMOTIONALSENSE_SYNC_LOG", "")
+    return bool(flag or (v and v != "0"))
+
+
+def sync_header(data: Path, cmd, env: dict) -> str:
+    """What a reader needs to interpret the log, with no personal data (paths are scrubbed later)."""
+    import platform
+    keys = ("SteamDeck", "SteamOS", "SteamGameId", "XDG_SESSION_TYPE", "XDG_CURRENT_DESKTOP", "WAYLAND_DISPLAY",
+            "DISPLAY", "ENABLE_GAMESCOPE_WSI", "GAMESCOPE_WAYLAND_DISPLAY", "SDL_AUDIODRIVER", "SDL_VIDEODRIVER",
+            "PULSE_LATENCY_MSEC", "PIPEWIRE_LATENCY", "APPIMAGE", "LD_PRELOAD", "DXVK_FRAME_RATE")
+    cpu = ""
+    try:
+        for ln in Path("/proc/cpuinfo").read_text().splitlines():
+            if ln.startswith("model name"):
+                cpu = ln.split(":", 1)[1].strip()
+                break
+    except OSError:
+        cpu = platform.processor()
+    try:
+        ver = json.loads((Path(cmd[0]).parent.parent / "manifest.json").read_text()).get("version_full", "?")
+    except (OSError, ValueError, IndexError):
+        ver = "?"
+    lines = ["# EmotionalSense-P3 sync log", f"# time: {time.strftime('%Y-%m-%d %H:%M:%S')}",
+             f"# platform: {platform.platform()} cpu: {cpu} cores: {os.cpu_count()}",
+             f"# argv: {' '.join(str(c) for c in cmd[1:])}"]
+    lines += [f"# env {k}={env[k]}" for k in keys if k in env]
+    return "\n".join(lines) + "\n"
+
+
+def spawn_game(cmd, env: dict, data: Path, sync_log: bool = False):
+    """Start the game. With the sync log the game's output goes to <data>/logs/sync-<time>.log
+    (never to the terminal); finish_game() scrubs the user's name out of it afterwards."""
+    if not sync_log_wanted(sync_log):
+        return subprocess.Popen(cmd, env=env)
+    env = dict(env)
+    env.update(SYNC_ENV)
+    logs = data / "logs"
+    logs.mkdir(parents=True, exist_ok=True)
+    path = logs / time.strftime("sync-%Y%m%d-%H%M%S.log")
+    f = open(path, "w", encoding="utf-8")
+    f.write(sync_header(data, cmd, env))
+    f.flush()
+    p = subprocess.Popen(cmd, env=env, stdout=f, stderr=subprocess.STDOUT)
+    f.close()
+    p.sync_log = path                                   # type: ignore[attr-defined]
+    return p
+
+
+def finish_game(p) -> None:
+    """After the game ended: scrub the sync log, if there is one."""
+    path = getattr(p, "sync_log", None)
+    if path:
+        try:
+            path.write_text(scrub_paths(path.read_text(encoding="utf-8", errors="replace")), encoding="utf-8")
+            print(f"sync log: {path}", file=sys.stderr)
+        except OSError:
+            pass
+
+
 def game_command(exe: Path, data: Path, cfg: dict, extra=(), confirm: str = "", verbose: bool = False) -> tuple:
     """(argv, env) for the prepared game, from the launcher options. `confirm`
     overrides the option (circle, cross or auto). `verbose` turns the game's diagnostic log on
@@ -218,6 +285,9 @@ def main(argv=None) -> int:
                     help="copy (never move) data of older versions from their old folders into the data folder")
     ap.add_argument("--verbose", "-v", action="store_true",
                     help="print progress and the game's diagnostic log (nothing is printed by default but errors)")
+    ap.add_argument("--sync-log", action="store_true",
+                    help="with --run: write the clock/vblank/audio diagnostic log to <data>/logs/sync-<time>.log "
+                         "(also on when EMOTIONALSENSE_SYNC_LOG=1)")
     ap.add_argument("--jobs", type=int, default=os.cpu_count() or 4)
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--version", action="store_true")
@@ -258,7 +328,8 @@ def main(argv=None) -> int:
         try:
             print("EmotionalSense-P3", json.loads((kit / "manifest.json").read_text())["version_full"])
         except OSError:
-            print("EmotionalSense-P3 (no kit)")
+            import es_version
+            print("EmotionalSense-P3", es_version.VERSION)
         return 0
     if a.selftest:
         try:
@@ -344,7 +415,10 @@ def main(argv=None) -> int:
                 print(t("cli.not_prepared"), file=sys.stderr)
                 return 2
             cmd, env = game_command(prep.game_exe(), data, cfg, a.game_args, a.confirm, a.verbose)
-            return subprocess.call(cmd, env=env)
+            p = spawn_game(cmd, env, data, a.sync_log)
+            code = p.wait()
+            finish_game(p)
+            return code
         return 0
     import es_gui
     if a.gui_smoke:

@@ -28,7 +28,8 @@ BTN_A, BTN_B, BTN_START = 0, 1, 6
 BTN_UP, BTN_DOWN, BTN_LEFT, BTN_RIGHT = 11, 12, 13, 14
 # SDL_GameControllerAxis
 AX_LX, AX_LY = 0, 1
-DEAD = 14000
+DEAD = 16000         # a stick counts as pushed past this...
+LIVE = 10000         # ...and as released only below this (no flicker around the edge)
 # Console-menu feel: ~350 ms before repeating, then ~13 moves a second.
 REPEAT_FIRST, REPEAT_NEXT = 0.35, 0.075
 
@@ -53,8 +54,11 @@ class Pad:
         self.sdl = None
         self.gcs = []
         self._scan = 0.0
-        self._held = {}
+        self._held = {}        # (device, key) -> pressed and armed
         self._next = {}
+        self._stuck = set()    # (device, key) already "pressed" when first seen: ignored until released once
+        self._axis = {}        # (device, key) -> past the dead zone (hysteresis)
+        self._ngc = -1
         self.confirm_cross = False
         if os.environ.get("EMOTIONALSENSE_NO_PAD"):
             return
@@ -95,33 +99,56 @@ class Pad:
             return
         self._scan = now + 1.0
         self.gcs = [g for g in self.gcs if s.SDL_GameControllerGetAttached(g)]
-        have = len(self.gcs)
-        if have == max(0, s.SDL_NumJoysticks()):
+        n = max(0, s.SDL_NumJoysticks())
+        ids = [i for i in range(n) if s.SDL_IsGameController(i)]
+        # Compare with the number of GAME controllers, not of joysticks: a raw device that is
+        # not a game controller (Steam Deck's own, gyro, mouse-like HID...) would otherwise make
+        # every scan close and reopen everything, once a second, forever.
+        if len(self.gcs) == len(ids) and self._ngc == n:
             return
+        self._ngc = n
         for g in self.gcs:
             s.SDL_GameControllerClose(g)
         self.gcs = []
-        for i in range(max(0, s.SDL_NumJoysticks())):
-            if s.SDL_IsGameController(i):
-                g = s.SDL_GameControllerOpen(i)
-                if g:
-                    self.gcs.append(g)
+        for i in ids:
+            g = s.SDL_GameControllerOpen(i)
+            if g:
+                self.gcs.append(g)
+        self._reset()
+
+    def _reset(self):
+        """The device set changed: whatever is down now was down before we looked (or is a
+        phantom): it only counts after it has been seen released."""
+        self._held, self._next, self._axis = {}, {}, {}
+        self._stuck = None     # filled by the next poll with everything that is down right now
+
+    def rearm(self):
+        """After a modal dialog or the game: forget held keys; what is still down must be
+        released before it counts again."""
+        self._reset()
 
     def _state(self) -> dict:
+        """{(device, key): pressed} for every open controller."""
         s = self.sdl
-        st = {k: False for k in ("up", "down", "left", "right", "ok", "back")}
-        for g in self.gcs:
+        st = {}
+        for d, g in enumerate(self.gcs):
             b = lambda n: bool(s.SDL_GameControllerGetButton(g, n))  # noqa: E731
             lx, ly = s.SDL_GameControllerGetAxis(g, AX_LX), s.SDL_GameControllerGetAxis(g, AX_LY)
             south, east = b(BTN_A), b(BTN_B)
             ok, back = (south, east) if self.confirm_cross else (east, south)
-            st["up"] |= b(BTN_UP) or ly < -DEAD
-            st["down"] |= b(BTN_DOWN) or ly > DEAD
-            st["left"] |= b(BTN_LEFT) or lx < -DEAD
-            st["right"] |= b(BTN_RIGHT) or lx > DEAD
-            st["ok"] |= ok or b(BTN_START)
-            st["back"] |= back
+            for key, hit in (("up", b(BTN_UP) or self._ax(d, "up", -ly)),
+                             ("down", b(BTN_DOWN) or self._ax(d, "down", ly)),
+                             ("left", b(BTN_LEFT) or self._ax(d, "left", -lx)),
+                             ("right", b(BTN_RIGHT) or self._ax(d, "right", lx)),
+                             ("ok", ok or b(BTN_START)), ("back", back)):
+                st[(d, key)] = bool(hit)
         return st
+
+    def _ax(self, d, key, v) -> bool:
+        on = self._axis.get((d, key), False)
+        on = v > (LIVE if on else DEAD)
+        self._axis[(d, key)] = on
+        return on
 
     def poll(self) -> List[str]:
         if self.sdl is None:
@@ -132,21 +159,27 @@ class Pad:
             return []
         out = []
         now = time.monotonic()
-        for k, down in self._state().items():
+        state = self._state()
+        if self._stuck is None:                  # first look after (re)open: anything down is stale
+            self._stuck = {k for k, down in state.items() if down}
+        for k, down in state.items():
             if down:
+                if k in self._stuck:
+                    continue
                 if not self._held.get(k):
                     self._held[k] = True
                     self._next[k] = now + REPEAT_FIRST
-                    out.append(k)
-                elif k in ("up", "down", "left", "right") and now >= self._next[k]:
+                    out.append(k[1])
+                elif k[1] in ("up", "down", "left", "right") and now >= self._next[k]:
                     # One move per poll at most, never a burst after a slow frame: the next
                     # one is due REPEAT_NEXT after this one (after the due time, not "now",
                     # so the rate stays even; resynchronised if we fell far behind).
                     nxt = self._next[k] + REPEAT_NEXT
                     self._next[k] = nxt if nxt > now else now + REPEAT_NEXT
-                    out.append(k)
+                    out.append(k[1])
             else:
                 self._held[k] = False
+                self._stuck.discard(k)
         return out
 
     def close(self):
