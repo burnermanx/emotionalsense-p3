@@ -1,0 +1,16 @@
+# PLAY MODE SELECT -> fifth item (HARD MODE 6.2T) -> its stage list -> song.
+# 6.2T is hidden until item 108 of the ownership bitmap is set, which is what
+# the unlock does; the mode itself is a 10-song list like 4.2T.
+400:2000:5
+460:0008:5
+@1+60:0008:5
+@1+550:0020:5
+@1+610:0020:5
+@1+670:0020:5
+@1+730:0020:5
+@1+850:2000:5
+@1+950:0020:5
+@1+1010:0020:5
+@1+1070:0020:5
+@1+1130:0020:5
+@1+1250:2000:5

@@ -1,0 +1,42 @@
+name: Crash or freeze report
+description: The game closed unexpectedly or stopped responding.
+title: "[crash] "
+labels: ["crash"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this. The launcher wrote a report file named `crash-<date>-<time>.txt`
+        in the `crashes` folder inside `EmotionalSense-P3-data` (the launcher's "Open folder"
+        button shows it). It lists the version, your system and graphics card, the game options,
+        what the game was doing and the last log lines. It does not contain your save, your disc
+        or environment variables, and your home folder appears as `~`.
+        Nothing is sent automatically: please read it, then attach it below.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Pre-filled by the launcher. Add anything that looks wrong.
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What were you doing?
+      description: Menu, song, mode, anything you changed in the options just before.
+    validations:
+      required: false
+  - type: textarea
+    id: report
+    attributes:
+      label: Crash report
+      description: Drag the `crash-*.txt` file here, or paste its contents.
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Package
+      description: Which download you use (for example linux-x86_64.AppImage, windows-arm64.zip).
+    validations:
+      required: false

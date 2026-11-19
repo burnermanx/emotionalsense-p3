@@ -1,0 +1,22 @@
+# FreeStyle 4T: title -> FreeStyle -> 4T -> first song (Trip, id 18).
+# The first entry is a song the original save had locked, so reaching scene 3
+# proves the unlock fix builds a usable list. Used by scripts/check_scripts.sh.
+400:2000:5
+460:0008:5
+@1+60:0008:5
+@1+550:0020:5
+@1+610:0020:5
+@1+670:0020:5
+@1+730:0020:5
+@1+790:0020:5
+@1+850:2000:5
+@1+950:0020:5
+@1+1010:0020:5
+@1+1070:0020:5
+@1+1130:0020:5
+@1+1250:2000:5
+@1+1450:2000:5
+@2+100:0020:5
+@2+200:0020:5
+@2+300:0020:5
+@2+400:2000:5

@@ -1,0 +1,15 @@
+# Cross-confirm twin of lounge.script: the same route with circle and cross swapped
+# (0x2000 <-> 0x4000), because with EMOTIONALSENSE_CONFIRM=cross the host's cross is the
+# game's confirm. Run it with --confirm cross.
+# Title -> LOUNGE -> VIDEO list, to see the collection the unlock fills.
+# X leaves PLAY MODE SELECT for ARCADE/MISSION/LOUNGE/OPTION; RIGHT advances.
+# The acceptance is the video counter (NN/43 with everything unlocked).
+400:4000:5
+460:0008:5
+@1+60:0008:5
+@1+200:2000:5
+@1+300:0020:5
+@1+360:0020:5
+@1+460:0008:5
+@1+700:0020:5
+@1+800:4000:5

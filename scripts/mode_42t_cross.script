@@ -1,0 +1,18 @@
+# Cross-confirm twin of mode_42t.script: the same route with circle and cross swapped
+# (0x2000 <-> 0x4000), because with EMOTIONALSENSE_CONFIRM=cross the host's cross is the
+# game's confirm. Run it with --confirm cross.
+# PLAY MODE SELECT -> fourth item (4.2T) -> FreeStyle list -> song.
+# The item is locked in a save that never unlocked it; the game only sets
+# bit 5 of the u16 at 0x134960 when the mode is earned.
+400:4000:5
+460:0008:5
+@1+60:0008:5
+@1+550:0020:5
+@1+610:0020:5
+@1+670:0020:5
+@1+850:4000:5
+@1+950:0020:5
+@1+1010:0020:5
+@1+1070:0020:5
+@1+1130:0020:5
+@1+1250:4000:5

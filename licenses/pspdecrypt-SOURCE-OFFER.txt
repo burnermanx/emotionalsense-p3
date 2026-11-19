@@ -1,0 +1,20 @@
+pspdecrypt source offer
+=======================
+
+The EmotionalSense launcher runs `pspdecrypt` (bin/pspdecrypt in the kit) as a
+separate program, through subprocess. It is not linked with, and does not
+include code from, the rest of EmotionalSense, which is MIT licensed.
+
+pspdecrypt is Copyright (C) its authors and licensed under the GNU General
+Public License, version 3 (licenses/pspdecrypt-GPL-3.0.txt).
+
+Corresponding source of the exact revision shipped:
+
+    https://github.com/John-K/pspdecrypt
+    revision c156627db7634d395c380c0a9589130f603307fc
+
+Every release also attaches that revision's source archive
+(pspdecrypt-src-c156627.tar.gz) next to the launcher. If you received the
+binary without it, you may request the source for three years from the
+release date by opening an issue at the EmotionalSense repository; it is also
+available at the URL above for as long as that repository exists.

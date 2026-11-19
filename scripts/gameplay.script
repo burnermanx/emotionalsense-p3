@@ -1,0 +1,33 @@
+# Scripted run to gameplay (EMOTIONALSENSE_SCRIPT=@scripts/gameplay.script).
+# Entries are "@scene+N:buttonmask:frames": the mask is held for `frames`
+# frames, starting N frames after the first time the scene word holds `scene`
+# (it still fires if the scene has changed by then). "@scene#k+N:..." is the
+# stricter form: only while the current scene is that scene, and only on the
+# k-th entry. The absolute form "vblank:buttonmask:frames" still works.
+# scripts/gameplay_fast.script prepends the intro (CIRCLE at 400, START at 460)
+# and is what scripts/check_scripts.sh runs.
+# Masks: START 0x0008, SELECT 0x0001, UP 0x0010, RIGHT 0x0020, DOWN 0x0040,
+# LEFT 0x0080, L 0x0100, R 0x0200, TRIANGLE 0x1000, CIRCLE 0x2000,
+# CROSS 0x4000, SQUARE 0x8000.
+#
+# Scene 1 is the title, 2 the music select, 3 the gameplay. Keeping the timing
+# relative to the scene is what makes this file survive a change in how long
+# the opening runs: with the audio pacing fixed the title moved from vblank
+# ~1881 to ~4807, and an absolute script would press START during the movie.
+#
+# Gameplay starts at vblank ~5430. Without any key the life drains 7.2 per
+# BREAK and the phase ends in a game over at ~33 s. To run the whole song,
+# hold the life up from the host instead of playing:
+#
+#   EMOTIONALSENSE_POKE=0x088D12CC:0x42C80000      # life = 100.0, every vblank
+#   EMOTIONALSENSE_POLL=0x088D12CC:f               # watch it as a float
+#
+# Keys are just more entries with the gameplay button masks, timed relative to
+# scene 3, e.g. "@3+100:4000:3" is a CROSS tap 100 frames into gameplay.
+# Generating them from the chart would need the note layout in memory, which
+# is not decoded yet; until then write them by hand or by ear.
+@1+0:0008:5
+@1+90:2000:5
+@1+150:2000:5
+@1+210:2000:5
+@1+270:2000:5

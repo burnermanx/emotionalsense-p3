@@ -1,0 +1,53 @@
+name: ci
+
+# The toolkit and the launcher only. The game itself is never built here: that
+# needs the ISO, which does not belong in a repository or in CI. The launcher's
+# own checks (translations, release guard, kit manifest) run on every push.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build libsdl2-dev libvulkan-dev
+      - name: Configure
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: ninja -C build
+      - name: Test
+        run: cd build && ctest -R "raster|emit" --output-on-failure
+      - name: Kit manifest agrees with CMake
+        run: python3 scripts/make_manifest.py --check build
+      - name: Launcher tests (translation keys, language detection, release guard)
+        run: python3 -m unittest discover launcher/tests
+
+  mingw:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build gcc-mingw-w64-x86-64 binutils-mingw-w64-x86-64 \
+            curl unzip zip
+          ./scripts/install-deps-mingw.sh
+      - name: Configure
+        run: |
+          cmake -B build-win -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-w64.cmake \
+            -DEMOTIONALSENSE_GEN_DIR=$PWD/build/gen
+      - name: Build
+        run: ninja -C build-win

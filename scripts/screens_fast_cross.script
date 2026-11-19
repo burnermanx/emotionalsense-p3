@@ -1,0 +1,17 @@
+# Cross-confirm twin of screens_fast.script: the same route with circle and cross swapped
+# (0x2000 <-> 0x4000), because with EMOTIONALSENSE_CONFIRM=cross the host's cross is the
+# game's confirm. Run it with --confirm cross.
+# Fast capture route: skips the opening (CIRCLE at 400, START at 460;
+# title at ~408). Same screens as scripts/screens.script, used by
+# scripts/check_scripts.sh.
+400:4000:5
+460:0008:5
+@1+60:0008:5
+@1+200:0020:5
+@1+260:0020:5
+@1+320:0020:5
+@1+380:0020:5
+@1+700:4000:5
+@1+1000:4000:5
+@1+1300:4000:5
+@1+1500:4000:5

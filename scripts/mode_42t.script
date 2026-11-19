@@ -1,0 +1,15 @@
+# PLAY MODE SELECT -> fourth item (4.2T) -> FreeStyle list -> song.
+# The item is locked in a save that never unlocked it; the game only sets
+# bit 5 of the u16 at 0x134960 when the mode is earned.
+400:2000:5
+460:0008:5
+@1+60:0008:5
+@1+550:0020:5
+@1+610:0020:5
+@1+670:0020:5
+@1+850:2000:5
+@1+950:0020:5
+@1+1010:0020:5
+@1+1070:0020:5
+@1+1130:0020:5
+@1+1250:2000:5

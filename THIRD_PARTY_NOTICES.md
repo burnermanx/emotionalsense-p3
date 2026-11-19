@@ -1,0 +1,34 @@
+# Third-party notices
+
+EmotionalSense itself (this repository, including the launcher and the
+`psprecomp` runtime) is MIT licensed (`LICENSE`). The launcher package
+carries the following third-party software. The game, its data and anything
+derived from them are **not** part of any release.
+
+| Component | Where | Licence | Source / notes |
+|---|---|---|---|
+| **pspdecrypt** | `kit/bin/pspdecrypt` (separate program, run by `subprocess`, never linked) | **GPL-3.0** | https://github.com/John-K/pspdecrypt at revision `c156627db7634d395c380c0a9589130f603307fc`; the source archive of that revision is attached to every release; see `licenses/pspdecrypt-SOURCE-OFFER.txt` |
+| SDL2 | shared library beside the game | zlib | https://libsdl.org |
+| FFmpeg (libavcodec, libavutil, libswresample) | shared libraries beside the game | **LGPL-2.1-or-later** (build without `--enable-gpl`) | BtbN/FFmpeg-Builds `lgpl-shared`, FFmpeg n8.1.3-35-gf1acb0a266 (https://github.com/BtbN/FFmpeg-Builds, source https://git.ffmpeg.org/ffmpeg.git). Dynamically linked: replace the shared libraries in the game folder to use another build |
+| zig 0.17.1 (Linux kit) | `kit/compiler/` | MIT; contains LLVM/clang/lld (Apache-2.0 with LLVM exceptions) and libc sources (glibc LGPL-2.1, musl MIT, mingw-w64) | https://ziglang.org |
+| llvm-mingw (Windows kit) | `kit/compiler/` | Apache-2.0 with LLVM exceptions; mingw-w64 (ZPL-2.1, public domain, BSD parts), winpthreads (MIT) | https://github.com/mstorsjo/llvm-mingw |
+| Python 3.13 and Tcl/Tk | launcher runtime | PSF-2.0; Tcl/Tk BSD-style | https://python.org, https://tcl.tk |
+| PyInstaller (bootloader) | launcher executable | GPL-2.0 **with the bootloader exception** (the produced executable is not GPL) | https://pyinstaller.org |
+| Pillow | launcher | MIT-CMU (HPND) | https://python-pillow.org |
+| zig 0.17.1 / llvm-mingw (aarch64 and Windows arm64 kits) | `kit/compiler/` | as above | the same projects, aarch64 builds; SDL2 for Windows arm64 is built from the SDL2 2.30.9 source release |
+| Exo 2 Italic (subset) | `assets/generated/Exo2-Italic.ttf` | SIL OFL 1.1 | https://github.com/google/fonts (`ofl/exo2`), commit pinned in `launcher/assets/fonts.json`; `licenses/OFL-exo2.txt` |
+| Noto Sans JP, Noto Sans KR (subsets) | `assets/generated/NotoSans*-sub.ttf` | SIL OFL 1.1 | https://github.com/google/fonts (`ofl/notosansjp`, `ofl/notosanskr`); `licenses/OFL-notosans*.txt` |
+| Vulkan loader | **not shipped**: the system's `libvulkan` is used | Apache-2.0 | provided by the graphics driver |
+
+## Exit dialog text
+
+`game/exit_text.c` holds the five "Quit the game? / Yes / No" prompts as 1-bit
+bitmaps rasterised once from **Noto Sans CJK Bold** (SIL OFL 1.1,
+https://github.com/notofonts/noto-cjk) by a one-off script (not part of the repository). The texts are
+ours; the OFL permits embedding rasterised glyphs, and the bitmaps are not a
+font. No game art is used.
+
+The fonts are subset to the characters the launcher's own text needs; the OFL
+permits this and the subsets keep the reserved font name rules (they are not
+sold on their own). Translations for Spanish, Japanese and Korean were written
+by an AI assistant and are marked in their files as needing native review.

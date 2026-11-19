@@ -1,0 +1,10 @@
+# Fast route to gameplay: skips the opening (CIRCLE at 400, START at 460;
+# title at ~408). Used by scripts/check_scripts.sh, which must finish in
+# under a minute. The full route is scripts/gameplay.script.
+400:2000:5
+460:0008:5
+@1+60:0008:5
+@1+200:2000:5
+@1+260:2000:5
+@1+320:2000:5
+@1+380:2000:5

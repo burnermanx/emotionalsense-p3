@@ -1,0 +1,21 @@
+# name frames  (the texture-dump routes: scripts/dump/<name>.script is run for <frames> frames)
+boot 460
+modes 2200
+menu 3000
+option 2800
+lounge 5200
+list 6500
+studio 4500
+play_c4t 5600
+play_c6t 5600
+play_e32 5600
+play_n42 5600
+play_h62 5600
+play_free1 6000
+play_free2 6000
+play_free3 6000
+play_free4 6000
+play_free5 6000
+result_c4t 11500
+result_c4t_low 11500
+result_h62 11500

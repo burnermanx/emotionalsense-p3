@@ -1,0 +1,6 @@
+# manual exceptions to texpack/classify_textures.py: <key> <class>; keys only
+0820e75ad2ebad32 illustration
+3ddbb8a994b8c554 interface
+6ac483817e5d4876 illustration
+be63b7a305a80269 interface
+bf62771857f976e0 interface

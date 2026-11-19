@@ -1,0 +1,24 @@
+# Cross-confirm twin of freestyle_select.script: the same route with circle and cross swapped
+# (0x2000 <-> 0x4000), because with EMOTIONALSENSE_CONFIRM=cross the host's cross is the
+# game's confirm. Run it with --confirm cross.
+# FreeStyle 4.2T: same route, but SELECT twice in the list (4T -> 3.2T ->
+# 4.2T) before confirming. Enters a song the original save had locked in a
+# style other than 4T. 6T is not reachable in FreeStyle: SELECT cycles
+# 4T -> 3.2T -> 4.2T -> 4T.
+400:4000:5
+460:0008:5
+@1+60:0008:5
+@1+550:0020:5
+@1+610:0020:5
+@1+670:0020:5
+@1+730:0020:5
+@1+790:0020:5
+@1+850:4000:5
+@1+950:0020:5
+@1+1010:0020:5
+@1+1070:0020:5
+@1+1130:0020:5
+@1+1250:4000:5
+@2+20:0001:5
+@2+60:0001:5
+@2+220:4000:5

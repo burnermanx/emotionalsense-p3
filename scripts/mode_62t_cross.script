@@ -1,0 +1,19 @@
+# Cross-confirm twin of mode_62t.script: the same route with circle and cross swapped
+# (0x2000 <-> 0x4000), because with EMOTIONALSENSE_CONFIRM=cross the host's cross is the
+# game's confirm. Run it with --confirm cross.
+# PLAY MODE SELECT -> fifth item (HARD MODE 6.2T) -> its stage list -> song.
+# 6.2T is hidden until item 108 of the ownership bitmap is set, which is what
+# the unlock does; the mode itself is a 10-song list like 4.2T.
+400:4000:5
+460:0008:5
+@1+60:0008:5
+@1+550:0020:5
+@1+610:0020:5
+@1+670:0020:5
+@1+730:0020:5
+@1+850:4000:5
+@1+950:0020:5
+@1+1010:0020:5
+@1+1070:0020:5
+@1+1130:0020:5
+@1+1250:4000:5

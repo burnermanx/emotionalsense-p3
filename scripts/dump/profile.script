@@ -1,0 +1,13 @@
+# Texture-dump bootstrap (launcher only, not in routes.txt): a data folder with no save makes the game
+# ask for a player name. Skip the warning screens, press ○ on "A" (the name becomes "DJ.A": a name
+# ending in "." is not accepted), go down to END, confirm, and dismiss "Profile registered". The game
+# writes its save at about vblank 2520; the run stops at 2700.
+400:2000:5
+460:0008:5
+2100:2000:8
+2150:0040:3
+2180:0040:3
+2210:0040:3
+2260:2000:8
+2400:2000:8
+2450:2000:8

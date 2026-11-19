@@ -1,0 +1,9 @@
+# Exit from the title (check_scripts.sh): the cancel button (CROSS in circle-confirm
+# mode) opens "Quit the game?", cancel again says No, then open it again, LEFT picks
+# Yes and CIRCLE confirms. The game must exit with code 0, still on the title.
+400:2000:5
+600:4000:5
+700:4000:5
+800:4000:5
+850:0080:5
+900:2000:5

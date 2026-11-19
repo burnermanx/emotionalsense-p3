@@ -1,0 +1,362 @@
+name: release
+
+# What a release carries: the launcher for six targets (Windows x86-64 and arm64 as a zip;
+# Linux x86-64 and aarch64 as an AppImage and a tar.gz), the build kit inside them, and the
+# source. Each target is built natively (the arm64 runners are free for public repositories
+# only, so this workflow runs after the repository is public). Everything derived from the
+# game is made on the player's machine from their own ISO and is never built or
+# published here: no game data, no generated C, no game binary. scripts/
+# release_guard.py lists every artefact and fails the run if it finds any.
+#
+# Pushing a tag v* creates a DRAFT release; reviewing and publishing it is the
+# maintainer's action. Nothing here pushes a tag.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  ZIG_VERSION: "0.17.1"
+  ZIG_SHA256: 3581863e3cbcfd0fce0efc682ce7e9e93da96668a977791d356a26d2a7e9b17a
+  LLVM_MINGW: "20261104"
+  LLVM_MINGW_WIN_SHA256: 552191b5754c49a5a20723276a6fc56541ea1922c4c50b7b669022333fc1b40f
+  FFMPEG_TAG: autobuild-2026-11-16-15-29
+  FFMPEG_BUILD: n8.1.3-35-gf1acb0a266
+  ZIG_AARCH64_SHA256: a1546d5646eb184437918d6635ca6b762a0e889eac09cef720ee7a1ed3fe7795
+  LLVM_MINGW_WIN_ARM64_SHA256: 7d7f8387a8706639b0b47a629d6e23f8b3ef9acce67e9832b8cd4c5bb2816eab
+  FFMPEG_LINUX_SHA256: d94773200aeb4b6aab1fdda89f97fa7048c036012f39a5441e5f6dded717fce6
+  FFMPEG_LINUXARM64_SHA256: 116bca83c86fe17b9eb9c9dd3dd502bbe2ee3fb5a4c30f89a57d41dfb4c703cf
+  FFMPEG_WIN_SHA256: dd923de0811e9a26f13142e22f30a9e555454e0dd0561785bcca23b8809a58a0
+  FFMPEG_WINARM64_SHA256: 71d85c382c63ebe22739def457248aebae8d5e64401aaab48d664abff97f1803
+  SDL2_MINGW: "2.30.9"
+  SDL2_MINGW_SHA256: b188d165dc4a0372042bff3d0c18e9bb90772581e92a7b8b47b521b47714f75c
+  # SDL2 has no MinGW arm64 download: the Windows arm64 job builds this source release.
+  SDL2_SRC_SHA256: 24b574f71c87a763f50704bbb630cbe38298d544a1f890f099a4696b1d6beba4
+  # GPL-3.0: built and shipped as a separate program, with its source attached.
+  PSPDECRYPT_REV: c156627db7634d395c380c0a9589130f603307fc
+
+jobs:
+  source:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Check the tag against CMakeLists.txt and CHANGELOG.md
+        run: |
+          set -eu
+          version=$(sed -n 's/^project(emotionalsense VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          tag=${GITHUB_REF_NAME#v}
+          if [ "$version" != "$tag" ]; then
+            echo "tag $GITHUB_REF_NAME does not match project VERSION $version" >&2
+            exit 1
+          fi
+          if ! grep -q "^## \[$version\]" CHANGELOG.md; then
+            echo "CHANGELOG.md has no section for $version" >&2
+            exit 1
+          fi
+
+      - name: Source tarball, with the submodule inside
+        run: |
+          set -eu
+          version=${GITHUB_REF_NAME#v}
+          dir=emotionalsense-$version
+          mkdir -p "$dir" out
+          git archive HEAD | tar -x -C "$dir"
+          git -C psprecomp archive HEAD | tar -x -C "$dir/psprecomp"
+          tar -czf "out/$dir-src.tar.gz" "$dir"
+
+      - name: Source of pspdecrypt (GPL-3.0), the pinned revision
+        run: |
+          set -eu
+          mkdir -p out
+          curl -fsSL -o "out/pspdecrypt-src-${PSPDECRYPT_REV%${PSPDECRYPT_REV#???????}}.tar.gz" \
+            "https://github.com/John-K/pspdecrypt/archive/${PSPDECRYPT_REV}.tar.gz"
+
+      - name: Release notes from CHANGELOG.md
+        run: |
+          python3 - "$GITHUB_REF_NAME" <<'PY' > out/notes.md
+          import re, sys
+          version = sys.argv[1].lstrip("v")
+          text = open("CHANGELOG.md", encoding="utf-8").read()
+          m = re.search(rf"^## \[{re.escape(version)}\][^\n]*\n(.*?)(?=^## \[|\Z)",
+                        text, re.M | re.S)
+          if not m:
+              sys.exit(f"no changelog section for {version}")
+          print(m.group(1).strip())
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: source
+          path: out/
+
+  linux:
+    name: linux (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-x86_64
+            runner: ubuntu-22.04      # glibc 2.35: the shipped libraries run on anything newer
+            zig_host: x86_64
+            ffmpeg_asset: linux64
+            libdir: x86_64-linux-gnu
+            appimagetool: appimagetool-x86_64.AppImage
+          - target: linux-aarch64
+            runner: ubuntu-22.04-arm
+            zig_host: aarch64
+            ffmpeg_asset: linuxarm64
+            libdir: aarch64-linux-gnu
+            appimagetool: appimagetool-aarch64.AppImage
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build cmake g++ make libsdl2-dev libvulkan-dev xz-utils libfuse2 file \
+            libssl-dev zlib1g-dev
+          python -m pip install pyinstaller pillow fonttools brotli
+
+      - name: Manifest agrees with CMake
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          cmake --build build --target allegrexrecomp
+          python scripts/make_manifest.py --check build
+
+      - name: Unit tests (translations, release guard, portable layout)
+        run: python -m unittest discover launcher/tests
+
+      - name: pspdecrypt (GPL-3.0, separate program, pinned revision)
+        run: |
+          set -eu
+          git clone https://github.com/John-K/pspdecrypt.git tools-src/pspdecrypt
+          git -C tools-src/pspdecrypt checkout -q "$PSPDECRYPT_REV"
+          # libcrypto and libz are linked statically so the program runs on any distro;
+          # this link-line edit is the only change to the pinned source
+          sed -i 's/-lz -lcrypto/-Wl,-Bstatic -lz -lcrypto -Wl,-Bdynamic -ldl -lpthread/' tools-src/pspdecrypt/Makefile
+          make -C tools-src/pspdecrypt -j"$(nproc)" CC=gcc CXX=g++
+          ldd tools-src/pspdecrypt/pspdecrypt
+
+      - name: Toolchains and libraries (pinned, checksummed)
+        env:
+          ZIG_SHA: ${{ matrix.zig_host == 'x86_64' && env.ZIG_SHA256 || env.ZIG_AARCH64_SHA256 }}
+          FFMPEG_SHA: ${{ matrix.ffmpeg_asset == 'linux64' && env.FFMPEG_LINUX_SHA256 || env.FFMPEG_LINUXARM64_SHA256 }}
+        run: |
+          set -eu
+          mkdir -p dl
+          cd dl
+          get() { curl -fsSL -o "$1" "$2"; echo "$3  $1" | sha256sum -c -; }
+          get zig.tar.xz "https://ziglang.org/download/${ZIG_VERSION}/zig-${{ matrix.zig_host }}-linux-${ZIG_VERSION}.tar.xz" "$ZIG_SHA"
+          get ffmpeg-linux.tar.xz "https://github.com/BtbN/FFmpeg-Builds/releases/download/${FFMPEG_TAG}/ffmpeg-${FFMPEG_BUILD}-${{ matrix.ffmpeg_asset }}-lgpl-shared-8.1.tar.xz" "$FFMPEG_SHA"
+          curl -fsSL -o appimagetool "https://github.com/AppImage/appimagetool/releases/download/continuous/${{ matrix.appimagetool }}"
+          chmod +x appimagetool
+          tar xf zig.tar.xz; tar xf ffmpeg-linux.tar.xz
+
+      - name: Kit (the kit builds its own allegrexrecomp)
+        run: |
+          set -eu
+          mkdir -p sdlp/include sdlp/lib
+          ln -s /usr/include/SDL2 sdlp/include/SDL2
+          cp -P /usr/lib/${{ matrix.libdir }}/libSDL2-2.0.so* sdlp/lib/
+          python scripts/make_kit.py --target ${{ matrix.target }} --out kit \
+            --compiler "dl/zig-${{ matrix.zig_host }}-linux-${ZIG_VERSION}" --sdl2 sdlp \
+            --ffmpeg "dl/ffmpeg-${FFMPEG_BUILD}-${{ matrix.ffmpeg_asset }}-lgpl-shared-8.1" \
+            --pspdecrypt tools-src/pspdecrypt/pspdecrypt
+
+      - name: Selftest of the kit (compiles the runtime, runs a test)
+        run: python launcher/es_main.py --selftest --kit kit
+
+      - name: Launcher (PyInstaller, AppImage, tar.gz)
+        run: |
+          python scripts/build_launcher.py --kit kit --out dist --target ${{ matrix.target }} \
+            --appimage --archive --appimagetool "$PWD/dl/appimagetool"
+          dist/EmotionalSense-P3/EmotionalSense-P3 --selftest --kit dist/EmotionalSense-P3/kit
+
+      - name: Guard
+        run: |
+          version=$(sed -n 's/^project(emotionalsense VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          python scripts/release_guard.py dist/EmotionalSense-P3 \
+            "dist/EmotionalSense-P3-$version-${{ matrix.target }}.AppImage" \
+            "dist/EmotionalSense-P3-$version-${{ matrix.target }}.tar.gz"
+          mkdir -p out
+          cp "dist/EmotionalSense-P3-$version-${{ matrix.target }}.AppImage" \
+             "dist/EmotionalSense-P3-$version-${{ matrix.target }}.tar.gz" out/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: out/EmotionalSense-P3-*
+
+  # PyInstaller does not cross-build, so each Windows launcher is built on a Windows runner of
+  # its own architecture. The kit is assembled there too, with llvm-mingw (clang + lld, UCRT).
+  windows:
+    name: windows (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: windows-x86_64
+            runner: windows-latest
+            mingw_triple: x86_64-w64-mingw32
+            msystem: MINGW64
+            msys_pkgs: mingw-w64-x86_64-gcc mingw-w64-x86_64-openssl mingw-w64-x86_64-zlib
+            ffmpeg_asset: win64
+            dlltool_machine: i386:x86-64
+          - target: windows-arm64
+            runner: windows-11-arm
+            mingw_triple: aarch64-w64-mingw32
+            msystem: CLANGARM64
+            msys_pkgs: mingw-w64-clang-aarch64-clang mingw-w64-clang-aarch64-openssl mingw-w64-clang-aarch64-zlib
+            ffmpeg_asset: winarm64
+            dlltool_machine: arm64
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install pyinstaller pillow fonttools brotli ninja
+
+      - name: pspdecrypt.exe (GPL-3.0, separate program, pinned revision)
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: ${{ matrix.msystem }}
+          install: >-
+            git make ${{ matrix.msys_pkgs }}
+      - name: Build pspdecrypt.exe
+        shell: msys2 {0}
+        run: |
+          set -eu
+          git clone https://github.com/John-K/pspdecrypt.git tools-src/pspdecrypt
+          git -C tools-src/pspdecrypt checkout -q "$PSPDECRYPT_REV"
+          sed -i 's/-lz -lcrypto/-static -lz -lcrypto -lws2_32 -lcrypt32/' tools-src/pspdecrypt/Makefile
+          if [ "${{ matrix.target }}" = windows-arm64 ]; then CC=clang; CXX=clang++; else CC=gcc; CXX=g++; fi
+          make -C tools-src/pspdecrypt -j4 CC=$CC CXX=$CXX
+
+      - name: Toolchain and libraries (pinned, checksummed)
+        env:
+          MINGW_SHA: ${{ matrix.target == 'windows-x86_64' && env.LLVM_MINGW_WIN_SHA256 || env.LLVM_MINGW_WIN_ARM64_SHA256 }}
+          FFMPEG_SHA: ${{ matrix.target == 'windows-x86_64' && env.FFMPEG_WIN_SHA256 || env.FFMPEG_WINARM64_SHA256 }}
+        run: |
+          set -eu
+          mkdir -p dl
+          cd dl
+          get() { curl -fsSL -o "$1" "$2"; echo "$3  $1" | sha256sum -c -; }
+          get llvm-mingw.zip "https://github.com/mstorsjo/llvm-mingw/releases/download/${LLVM_MINGW}/llvm-mingw-${LLVM_MINGW}-ucrt-$([ '${{ matrix.target }}' = windows-x86_64 ] && echo x86_64 || echo aarch64).zip" "$MINGW_SHA"
+          get ffmpeg-win.zip "https://github.com/BtbN/FFmpeg-Builds/releases/download/${FFMPEG_TAG}/ffmpeg-${FFMPEG_BUILD}-${{ matrix.ffmpeg_asset }}-lgpl-shared-8.1.zip" "$FFMPEG_SHA"
+          7z x -y llvm-mingw.zip > /dev/null; 7z x -y ffmpeg-win.zip > /dev/null
+          if [ '${{ matrix.target }}' = windows-x86_64 ]; then
+            get sdl2-mingw.tar.gz "https://libsdl.org/release/SDL2-devel-${SDL2_MINGW}-mingw.tar.gz" "$SDL2_MINGW_SHA256"
+            tar xf sdl2-mingw.tar.gz
+          else
+            get sdl2-src.tar.gz "https://libsdl.org/release/SDL2-${SDL2_MINGW}.tar.gz" "$SDL2_SRC_SHA256"
+            tar xf sdl2-src.tar.gz
+          fi
+
+      - name: SDL2 for arm64 (built from the pinned source release)
+        if: matrix.target == 'windows-arm64'
+        run: |
+          set -eu
+          MINGW="$PWD/dl/llvm-mingw-${LLVM_MINGW}-ucrt-aarch64"
+          cmake -S "dl/SDL2-${SDL2_MINGW}" -B sdl-build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=ARM64 \
+            -DCMAKE_C_COMPILER="$MINGW/bin/aarch64-w64-mingw32-clang" \
+            -DCMAKE_RC_COMPILER="$MINGW/bin/aarch64-w64-mingw32-windres" \
+            -DSDL_STATIC=OFF -DSDL_SHARED=ON -DSDL_TEST=OFF -DCMAKE_INSTALL_PREFIX="$PWD/sdl2-arm64"
+          cmake --build sdl-build
+          cmake --install sdl-build
+
+      - name: Windows kit (the kit builds its own allegrexrecomp.exe)
+        run: |
+          set -eu
+          if [ '${{ matrix.target }}' = windows-x86_64 ]; then
+            MINGW="$PWD/dl/llvm-mingw-${LLVM_MINGW}-ucrt-x86_64"
+            SDL="dl/SDL2-${SDL2_MINGW}/x86_64-w64-mingw32"
+          else
+            MINGW="$PWD/dl/llvm-mingw-${LLVM_MINGW}-ucrt-aarch64"
+            SDL="sdl2-arm64"
+          fi
+          # the Vulkan loader is a system DLL: only an import library is needed
+          { echo "LIBRARY vulkan-1.dll"; echo "EXPORTS"
+            grep -o "VKAPI_CALL vk[A-Za-z0-9_]*" psprecomp/src/vk_mini.h | sed 's/VKAPI_CALL //' | sort -u
+          } > vulkan-1.def
+          "$MINGW/bin/llvm-dlltool.exe" -m ${{ matrix.dlltool_machine }} -d vulkan-1.def -l libvulkan-1.a
+          python scripts/make_kit.py --target ${{ matrix.target }} --out kit \
+            --compiler "$MINGW" --sdl2 "$SDL" \
+            --ffmpeg "dl/ffmpeg-${FFMPEG_BUILD}-${{ matrix.ffmpeg_asset }}-lgpl-shared-8.1" --vulkan-lib libvulkan-1.a \
+            --pspdecrypt tools-src/pspdecrypt/pspdecrypt.exe
+
+      - name: Selftest of the kit on a real Windows (compiles the runtime, runs a test)
+        run: python launcher/es_main.py --selftest --kit kit
+
+      - name: Launcher (PyInstaller onedir)
+        run: python scripts/build_launcher.py --kit kit --out dist --target ${{ matrix.target }} --archive
+
+      - name: Selftest of the packaged launcher
+        run: dist/EmotionalSense-P3/EmotionalSense-P3.exe --selftest --kit dist/EmotionalSense-P3/kit
+
+      - name: Guard
+        run: |
+          version=$(sed -n 's/^project(emotionalsense VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          python scripts/release_guard.py dist/EmotionalSense-P3
+          mkdir -p out
+          cp "dist/EmotionalSense-P3-$version-${{ matrix.target }}.zip" out/
+          python scripts/release_guard.py "out/EmotionalSense-P3-$version-${{ matrix.target }}.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: out/EmotionalSense-P3-*
+
+  publish:
+    needs: [source, linux, windows]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: parts
+      - name: Collect, guard, checksum
+        run: |
+          set -eu
+          mkdir -p release
+          cp parts/source/*.tar.gz release/
+          for t in linux-x86_64 linux-aarch64 windows-x86_64 windows-arm64; do
+            cp parts/$t/EmotionalSense-P3-* release/
+          done
+          # the six packages and nothing else of this shape
+          test "$(ls release/EmotionalSense-P3-* | wc -l)" = 6
+          python3 scripts/release_guard.py release/*
+          (cd release && sha256sum * > SHA256SUMS)
+          cat release/SHA256SUMS
+      - name: Draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          # 0.1.0 is announced as "v0.1"; a patch release keeps its full number
+          if [ "${version##*.}" = 0 ]; then shown="v${version%.*}"; else shown="v$version"; fi
+          gh release create "$GITHUB_REF_NAME" \
+            --draft \
+            --title "EmotionalSense-P3 $shown" \
+            --notes-file parts/source/notes.md \
+            release/*
