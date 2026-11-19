@@ -279,8 +279,8 @@ jobs:
           MINGW="$PWD/dl/llvm-mingw-${LLVM_MINGW}-ucrt-aarch64"
           cmake -S "dl/SDL2-${SDL2_MINGW}" -B sdl-build -G Ninja -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=ARM64 \
-            -DCMAKE_C_COMPILER="$MINGW/bin/aarch64-w64-mingw32-clang" \
-            -DCMAKE_RC_COMPILER="$MINGW/bin/aarch64-w64-mingw32-windres" \
+            -DCMAKE_C_COMPILER="$MINGW/bin/aarch64-w64-mingw32-clang.exe" \
+            -DCMAKE_RC_COMPILER="$MINGW/bin/aarch64-w64-mingw32-windres.exe" \
             -DSDL_STATIC=OFF -DSDL_SHARED=ON -DSDL_TEST=OFF -DCMAKE_INSTALL_PREFIX="$PWD/sdl2-arm64"
           cmake --build sdl-build
           cmake --install sdl-build
