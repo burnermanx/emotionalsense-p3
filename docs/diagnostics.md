@@ -41,6 +41,35 @@ EmotionalSense-P3 --run --sync-log                        # terminal / Desktop M
 EMOTIONALSENSE_SYNC_LOG=1 %command%                       # Steam launch options (Game Mode)
 ```
 
+## Renderer report (Vulkan did not start)
+
+On every start the game writes `<data folder>/logs/renderer.log`, whatever the log setting: the
+renderer asked for (`requested:`) and the one that runs (`result:`), the environment that matters to
+a graphics start (library paths, `LD_PRELOAD`, `VK_*`, `STEAM*`, session and display variables; the
+user name in paths is replaced by `~`) and every step of the Vulkan start-up with its `VkResult`
+(loader and instance version, layers, extensions, the libraries loaded into the process, instance,
+physical devices, device). When Vulkan does not start the game runs the software renderer (1x, slow:
+no upscale, and the audio can fall behind) and the launcher says so with a dialog in the language of
+the launcher, with the report. `result:` is then `software-fallback (vulkan did not start)`.
+
+A renderer named explicitly (`--renderer vulkan`, the launcher's Renderer = Vulkan option or
+`EMOTIONALSENSE_RENDERER=vulkan`) never falls back: the game stops with exit code 3 and the reason.
+Leave the option on `auto` for normal play.
+
+This renderer draws offscreen and never presents through Vulkan, so it turns the implicit layers off
+for its instance (the Gamescope WSI layer of Game Mode, Steam's overlay and pipeline-cache layers: a
+failure inside the Gamescope layer aborts the process). `EMOTIONALSENSE_VK_LAYERS=1` leaves them on.
+The launcher also hands the game the system's library environment without Steam's runtime folders in
+`LD_LIBRARY_PATH` and without Steam's overlay in `LD_PRELOAD` (`EMOTIONALSENSE_KEEP_STEAM_ENV=1`
+keeps them).
+
+```
+# Steam Deck, Game Mode: launch options of the shortcut
+EMOTIONALSENSE_SYNC_LOG=1 %command%
+# Desktop Mode (Konsole), in the folder of the AppImage
+EMOTIONALSENSE_SYNC_LOG=1 ./EmotionalSense-P3-0.1.0-linux-x86_64.AppImage --run
+```
+
 ## Variables
 
 | Variable | Effect | Notes |

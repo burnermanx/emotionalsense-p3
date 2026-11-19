@@ -60,3 +60,44 @@ def child_env(base: Optional[Mapping[str, str]] = None) -> dict:
     for var in [v for v in env if v.startswith("_PYI_") or v == "_MEIPASS2"]:
         env.pop(var)
     return env
+
+
+# Folders of the Steam client and its Linux runtime. Steam hands them to every program it starts
+# (a non-Steam shortcut in Game Mode too): LD_LIBRARY_PATH carries the scout runtime and the
+# Steam folders, LD_PRELOAD the overlay. The game needs none of it: its own libraries come from its
+# folder and the system's Vulkan driver, loader and layers must be the system's. Steam's folders
+# first would put Steam's SDL3, the runtime's libstdc++/libdrm/... in front of what the driver was
+# built against.
+STEAM_DIRS = frozenset(("steam-runtime", "ubuntu12_32", "ubuntu12_64", "steamrt32", "steamrt64", "steamrt",
+                        "pinned_libs_32", "pinned_libs_64", "libcurl_compat_32", "libcurl_compat_64"))
+
+
+def _steam_path(path: str) -> bool:
+    return any(c in STEAM_DIRS for c in path.replace("\\", "/").split("/"))
+
+
+def _steam_preload(entry: str) -> bool:
+    return os.path.basename(entry.replace("\\", "/")).startswith("gameoverlayrenderer")
+
+
+def game_env(base: Optional[Mapping[str, str]] = None) -> dict:
+    """The environment of the game itself: `child_env`, without the Steam client's own library
+    folders in LD_LIBRARY_PATH and without its overlay in LD_PRELOAD. EMOTIONALSENSE_KEEP_STEAM_ENV=1
+    leaves them (to compare)."""
+    env = child_env(base)
+    if env.get("EMOTIONALSENSE_KEEP_STEAM_ENV", "") not in ("", "0"):
+        return env
+    for var in PATH_VARS:
+        if var in env:
+            kept = [d for d in env[var].split(os.pathsep) if d and not _steam_path(d)]
+            if kept:
+                env[var] = os.pathsep.join(kept)
+            else:
+                env.pop(var)
+    if "LD_PRELOAD" in env:
+        kept = [e for e in env["LD_PRELOAD"].replace(":", " ").split() if not _steam_preload(e)]
+        if kept:
+            env["LD_PRELOAD"] = " ".join(kept)
+        else:
+            env.pop("LD_PRELOAD")
+    return env

@@ -71,5 +71,54 @@ class GameCommand(unittest.TestCase):
         self.assertEqual(env["LD_LIBRARY_PATH"], "/data/game")
 
 
+S = "/home/u/.local/share/Steam"
+RT = S + "/ubuntu12_32/steam-runtime"
+
+
+class SteamEnv(unittest.TestCase):
+    """What Steam gives a non-Steam shortcut in Game Mode must not reach the game's Vulkan start."""
+    BASE = {"LD_LIBRARY_PATH": ":".join([S + "/ubuntu12_32", S + "/ubuntu12_64", RT + "/pinned_libs_32", RT + "/pinned_libs_64",
+                                         "/usr/lib32", "/usr/lib", RT + "/lib/x86_64-linux-gnu", RT + "/usr/lib"]),
+            "LD_PRELOAD": S + "/ubuntu12_32/gameoverlayrenderer.so:" + S + "/ubuntu12_64/gameoverlayrenderer.so",
+            "SteamDeck": "1", "ENABLE_GAMESCOPE_WSI": "1", "PATH": "/usr/bin"}
+
+    def test_steam_runtime_and_overlay_are_dropped_for_the_game(self):
+        env = es_env.game_env(self.BASE)
+        self.assertEqual(env["LD_LIBRARY_PATH"], "/usr/lib32:/usr/lib")
+        self.assertNotIn("LD_PRELOAD", env)
+        self.assertEqual(env["SteamDeck"], "1")                       # only the library injection goes
+        self.assertEqual(env["ENABLE_GAMESCOPE_WSI"], "1")
+
+    def test_other_preloads_stay(self):
+        env = es_env.game_env({"LD_PRELOAD": S + "/ubuntu12_64/gameoverlayrenderer.so /usr/lib/libmangohud.so"})
+        self.assertEqual(env["LD_PRELOAD"], "/usr/lib/libmangohud.so")
+
+    def test_only_steam_folders_go(self):
+        env = es_env.game_env({"LD_LIBRARY_PATH": "/opt/mine/ubuntu12:/usr/lib/steam:/data/game:" + RT})
+        self.assertEqual(env["LD_LIBRARY_PATH"], "/opt/mine/ubuntu12:/usr/lib/steam:/data/game")
+
+    def test_all_steam_means_unset(self):
+        self.assertNotIn("LD_LIBRARY_PATH", es_env.game_env({"LD_LIBRARY_PATH": S + "/ubuntu12_64:" + RT + "/lib"}))
+
+    def test_keep_switch(self):
+        env = es_env.game_env(dict(self.BASE, EMOTIONALSENSE_KEEP_STEAM_ENV="1"))
+        self.assertIn("steam-runtime", env["LD_LIBRARY_PATH"])
+        self.assertIn("gameoverlayrenderer", env["LD_PRELOAD"])
+
+    def test_frozen_launcher_under_steam(self):
+        p1, p2, p3 = frozen()
+        base = dict(self.BASE, LD_LIBRARY_PATH=MEI + ":" + self.BASE["LD_LIBRARY_PATH"],
+                    LD_LIBRARY_PATH_ORIG=self.BASE["LD_LIBRARY_PATH"])
+        with p1, p2, p3:
+            env = es_env.game_env(base)
+        self.assertEqual(env["LD_LIBRARY_PATH"], "/usr/lib32:/usr/lib")
+
+    def test_game_command_uses_it(self):
+        with mock.patch.dict(os.environ, self.BASE, clear=True):
+            argv, env = es_main.game_command(Path("/data/game/g"), Path("/data"), dict(es_main.CONFIG_DEFAULTS))
+        self.assertEqual(env["LD_LIBRARY_PATH"], "/data/game:/usr/lib32:/usr/lib")
+        self.assertNotIn("LD_PRELOAD", env)
+
+
 if __name__ == "__main__":
     unittest.main()

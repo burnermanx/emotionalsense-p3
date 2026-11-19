@@ -123,6 +123,8 @@
  "portable.migrated": "Copied {count} files from {path}.",
  "crash.title": "The game closed unexpectedly",
  "crash.body": "EmotionalSense-P3 wrote a report about what happened:\n{file}\nin {folder}\n\nYou can help by opening an issue on GitHub. Nothing is sent automatically: read the report, then attach it yourself.",
+ "renderer.title": "Vulkan did not start",
+ "renderer.body": "Vulkan did not start, so the game ran in software mode: slower, without the upscale, and the music can drift from the notes.\nA report of every start-up step was written:\n{file}\nin {folder}\n\nYou can help by opening an issue on GitHub. Nothing is sent automatically: read the report, then attach it yourself.",
  "crash.open_folder": "Open folder",
  "crash.copy": "Copy report",
  "crash.issue": "Open issue on GitHub",

@@ -123,6 +123,8 @@
  "portable.migrated": "{count} arquivos copiados de {path}.",
  "crash.title": "O jogo fechou inesperadamente",
  "crash.body": "O EmotionalSense-P3 gravou um relatório do que aconteceu:\n{file}\nem {folder}\n\nVocê pode ajudar abrindo uma issue no GitHub. Nada é enviado automaticamente: leia o relatório e anexe você mesmo.",
+ "renderer.title": "O Vulkan não iniciou",
+ "renderer.body": "O Vulkan não iniciou, então o jogo rodou no modo software: mais lento, sem o upscale, e a música pode sair do tempo das notas.\nUm relatório de cada passo da inicialização foi gravado:\n{file}\nem {folder}\n\nVocê pode ajudar abrindo uma issue no GitHub. Nada é enviado automaticamente: leia o relatório e anexe você mesmo.",
  "crash.open_folder": "Abrir pasta",
  "crash.copy": "Copiar relatório",
  "crash.issue": "Abrir issue no GitHub",

@@ -30,9 +30,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 
 #include "app_icon.h"
 #include "crash.h"
+#include "crash_scrub.h"
 #include "update_overlay.h"
 #include "host_compat.h"
 #include "version.h"
@@ -241,6 +243,92 @@ static void score_sample_tick(void) {
         djmax_score_sample(psp_read32(j + 0x814), psp_read16(j + 0x810));
 }
 
+
+/* ---- Renderer report ------------------------------------------------------------------------
+ * <data>/logs/renderer.log is written on every start, whatever the log setting: which renderer was
+ * asked for, which one runs, the environment that matters to a graphics start (names of paths with
+ * the user's name replaced by ~) and every step of the Vulkan start-up with its VkResult. The
+ * launcher reads the "result:" line to tell the user when Vulkan did not start. */
+#ifdef _WIN32
+extern char **_environ;
+#  define ES_ENVIRON _environ
+#else
+extern char **environ;
+#  define ES_ENVIRON environ
+#endif
+
+static char g_rep_home[512];
+
+static int rep_env_wanted(const char *e) {
+    static const char *const pre[] = { "LD_LIBRARY_PATH=", "LD_PRELOAD=", "LD_LIBRARY_PATH_ORIG=", "VK_", "STEAM", "Steam",
+        "XDG_SESSION_TYPE=", "XDG_CURRENT_DESKTOP=", "DISPLAY=", "WAYLAND_DISPLAY=", "SDL_", "ENABLE_GAMESCOPE_WSI=",
+        "DISABLE_GAMESCOPE_WSI=", "GAMESCOPE", "ENABLE_VK_LAYER", "DISABLE_VK_LAYER", "MESA_", "RADV_", "AMD_VULKAN_ICD=",
+        "__GLX_VENDOR_LIBRARY_NAME=", "APPIMAGE=", "EMOTIONALSENSE_" };
+    for (size_t i = 0; i < sizeof pre / sizeof *pre; i++)
+        if (!strncmp(e, pre[i], strlen(pre[i]))) return 1;
+    return 0;
+}
+
+static void rep_emit(char c, void *ctx) {
+    char **p = (char **)ctx;      /* p[0] = write pointer, p[1] = end */
+    if (p[0] < p[1]) *p[0]++ = c;
+}
+
+/* Append s to the buffer scrubbed (home -> ~, user name in /home/<name> -> ~), line by line (the
+ * scrubber drops control characters, so the newlines are kept here). */
+static size_t rep_append(char *buf, size_t cap, size_t n, const char *s) {
+    while (*s && n + 1 < cap) {
+        size_t len = strcspn(s, "\n");
+        char *p[2] = { buf + n, buf + cap - 1 };
+        es_scrub(s, len, g_rep_home, rep_emit, p);
+        if (p[0] < p[1] && s[len] == '\n') *p[0]++ = '\n';
+        *p[0] = 0;
+        n = (size_t)(p[0] - buf);
+        s += len + (s[len] == '\n');
+    }
+    return n;
+}
+
+/* The environment lines for the report, taken before the renderer changes anything. */
+static void rep_snapshot_env(char *buf, size_t cap) {
+    const char *home =
+#ifdef _WIN32
+        getenv("USERPROFILE");
+#else
+        getenv("HOME");
+#endif
+    if (home && strlen(home) > 2 && strlen(home) < sizeof g_rep_home) snprintf(g_rep_home, sizeof g_rep_home, "%s", home);
+    size_t n = 0;
+    buf[0] = 0;
+    for (char **e = ES_ENVIRON; e && *e; e++) {
+        if (!rep_env_wanted(*e)) continue;
+        n = rep_append(buf, cap, n, "env ");
+        n = rep_append(buf, cap, n, *e);
+        n = rep_append(buf, cap, n, "\n");
+    }
+}
+
+static void write_renderer_report(const char *data, const char *requested, const char *result, const char *env_text) {
+    static char buf[40960];
+    size_t n = 0;
+    char head[512];
+    time_t t = time(NULL);
+    char ts[64] = "?";
+    struct tm *tm = localtime(&t);
+    if (tm) strftime(ts, sizeof ts, "%Y-%m-%d %H:%M:%S", tm);
+    snprintf(head, sizeof head, "EmotionalSense-P3 renderer report\nversion: %s (psprecomp %s)\ntime: %s\nrequested: %s\nresult: %s\n",
+             EMOTIONALSENSE_VERSION_FULL, EMOTIONALSENSE_PSPRECOMP, ts, requested, result);
+    n = rep_append(buf, sizeof buf, 0, head);
+    n = rep_append(buf, sizeof buf, n, env_text);
+    n = rep_append(buf, sizeof buf, n, psp_report_text());
+    char dir[1100], path[1200];
+    snprintf(dir, sizeof dir, "%s/logs", data);
+    host_mkdir(dir);
+    snprintf(path, sizeof path, "%s/renderer.log", dir);
+    FILE *f = fopen(path, "wb");
+    if (f) { fwrite(buf, 1, n, f); fclose(f); }
+}
+
 int main(int argc, char **argv) {
     static char data[1024], elf[1200], ms[1200];
     host_stdio_init();
@@ -290,7 +378,7 @@ int main(int argc, char **argv) {
             return 0;
         }
         else if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) {
-            printf("usage: %s [--data <dir>] [--scale N] [--internal-scale N|auto] [--tex-filter nearest|linear|auto] [--fps N] [--frames N] [--capture file.ppm] [--renderer vulkan|software|null] [--confirm circle|cross|auto] [--fullscreen 1|0|auto] [--fever respect|original] [--score respect|original] [--verbose] [--version]\n\nNothing is printed by default except fatal errors; --verbose (or EMOTIONALSENSE_LOG=1, or any EMOTIONALSENSE_TRACE_* variable) prints the diagnostic log\n", argv[0]);
+            printf("usage: %s [--data <dir>] [--scale N] [--internal-scale N|auto] [--tex-filter nearest|linear|auto] [--fps N] [--frames N] [--capture file.ppm] [--renderer vulkan|software|null (a named renderer never falls back)] [--confirm circle|cross|auto] [--fullscreen 1|0|auto] [--fever respect|original] [--score respect|original] [--verbose] [--version]\n\nNothing is printed by default except fatal errors; --verbose (or EMOTIONALSENSE_LOG=1, or any EMOTIONALSENSE_TRACE_* variable) prints the diagnostic log\n", argv[0]);
             return 0;
         }
     }
@@ -457,14 +545,32 @@ int main(int argc, char **argv) {
         psp_render_scale = n < 1 ? 1 : n > 4 ? 4 : n;
     }
 
-    if (psp_render_current()->init(480, 272) != 0) {
-        psp_log("emotionalsense: %s init failed, falling back to software\n",
-                psp_render_current()->name);
-        psp_render_select("software");
-        if (psp_render_scale > 1) {
-            psp_log("emotionalsense: the software renderer draws at 1x; "
-                            "internal scale %d ignored\n", psp_render_scale);
-            psp_render_scale = 1;
+    {
+        static char env_text[8192];
+        rep_snapshot_env(env_text, sizeof env_text);
+        const char *asked = renderer && *renderer ? renderer : "auto";
+        psp_report_clear();
+        if (psp_render_current()->init(480, 272) != 0) {
+            const char *failed = psp_render_current()->name;
+            psp_report("render: %s init failed\n", failed);
+            /* A renderer named on the command line (or EMOTIONALSENSE_RENDERER) is a request, not a
+             * preference: the Vulkan one then stops with the reason instead of silently running the
+             * slow software renderer (diagnosis, `--renderer vulkan`). */
+            if (!strcmp(failed, "vulkan") && !strcmp(asked, "vulkan")) {
+                write_renderer_report(data, asked, "failed (vulkan requested, no fallback)", env_text);
+                psp_fatal("emotionalsense: the Vulkan renderer did not start and --renderer vulkan allows no fallback; "
+                          "see %s/logs/renderer.log\n", data);
+                return 3;
+            }
+            psp_render_select("software");
+            psp_report("render: falling back to software\n");
+            if (psp_render_scale > 1) {
+                psp_report("render: the software renderer draws at 1x; internal scale %d ignored\n", psp_render_scale);
+                psp_render_scale = 1;
+            }
+            write_renderer_report(data, asked, !strcmp(failed, "vulkan") ? "software-fallback (vulkan did not start)" : "software-fallback", env_text);
+        } else {
+            write_renderer_report(data, asked, psp_render_current()->name, env_text);
         }
     }
     psp_out("EmotionalSense-P3-game %s (psprecomp %s)\n",

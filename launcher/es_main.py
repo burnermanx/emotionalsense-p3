@@ -147,7 +147,7 @@ def game_command(exe: Path, data: Path, cfg: dict, extra=(), confirm: str = "", 
     overrides the option (circle, cross or auto). `verbose` turns the game's diagnostic log on
     (it prints nothing by default)."""
     import es_env
-    env = es_env.child_env()
+    env = es_env.game_env()
     env["EMOTIONALSENSE_DATA"] = str(data)
     if verbose:
         env["EMOTIONALSENSE_LOG"] = "1"
@@ -232,6 +232,40 @@ def issue_url(path: Path) -> str:
                f"Report file: {path.name} (attached below)")
     return (f"{ISSUES_URL}?template=crash.yml&title={quote('[crash] ' + kind + ' ' + i.get('version', ''))}"
             f"&summary={quote(summary)}")
+
+
+def renderer_report(data: Path, since: float = 0.0):
+    """After a game run: (path, result) when the game wrote <data>/logs/renderer.log in this run
+    (newer than `since`) and Vulkan did not start -- the game ran the software renderer (or, with
+    --renderer vulkan, did not run); else None."""
+    path = data / "logs" / "renderer.log"
+    try:
+        if path.stat().st_mtime < since - 2:
+            return None
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines()[:12]:
+            if line.startswith("result: "):
+                result = line[8:].strip()
+                return (path, result) if result.startswith(("software-fallback", "failed")) else None
+    except OSError:
+        pass
+    return None
+
+
+def renderer_issue_url(path: Path, result: str) -> str:
+    """A new-issue URL for a Vulkan that did not start (no form: a plain title and summary). The
+    report is attached by the user; nothing is sent from here."""
+    from urllib.parse import quote
+    info = {}
+    try:
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines()[:6]:
+            k, _, v = line.partition(": ")
+            if v:
+                info[k] = scrub_paths(v)
+    except OSError:
+        pass
+    summary = (f"Vulkan did not start ({result}).\nVersion: {info.get('version', '?')}\n"
+               f"Report file: {path.name} (attach it below)\n")
+    return f"{ISSUES_URL}?title={quote('[vulkan] did not start ' + info.get('version', ''))}&body={quote(summary)}"
 
 
 def backup_save(data: Path) -> Path:
@@ -415,9 +449,13 @@ def main(argv=None) -> int:
                 print(t("cli.not_prepared"), file=sys.stderr)
                 return 2
             cmd, env = game_command(prep.game_exe(), data, cfg, a.game_args, a.confirm, a.verbose)
+            t_start = time.time()
             p = spawn_game(cmd, env, data, a.sync_log)
             code = p.wait()
             finish_game(p)
+            found = renderer_report(data, t_start)
+            if found:
+                print(f"{t('renderer.title')}: {scrub_paths(str(found[0]))}", file=sys.stderr)
             return code
         return 0
     import es_gui

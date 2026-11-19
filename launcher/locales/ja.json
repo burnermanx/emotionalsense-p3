@@ -123,6 +123,8 @@
  "portable.migrated": "{path} から {count} 個のファイルをコピーしました。",
  "crash.title": "ゲームが予期せず終了しました",
  "crash.body": "EmotionalSense-P3 は状況のレポートを書き出しました:\n{file}\n場所: {folder}\n\nGitHub で issue を作成して協力できます。自動では何も送信されません。内容を確認してから、ご自身で添付してください。",
+ "renderer.title": "Vulkan を開始できませんでした",
+ "renderer.body": "Vulkan を開始できなかったため、ゲームはソフトウェアモードで動作しました。動作が遅くなり、アップスケールもされず、音楽とノーツがずれることがあります。\n起動の各手順のレポートを書き出しました:\n{file}\n場所: {folder}\n\nGitHub で issue を作成して協力できます。自動では何も送信されません。内容を確認してから、ご自身で添付してください。",
  "crash.open_folder": "フォルダーを開く",
  "crash.copy": "レポートをコピー",
  "crash.issue": "GitHub で issue を開く",

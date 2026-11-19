@@ -12,6 +12,14 @@ build the rest from your own disc.
 
 ### Fixed
 
+- **Vulkan start-up is now visible and no longer exposed to Steam's layers/runtime** (Steam Deck):
+  the game writes `<data>/logs/renderer.log` on every start (which renderer, the relevant
+  environment, each Vulkan step with its `VkResult`); when Vulkan does not start the launcher
+  shows a dialog (five languages) with the report and an issue link; `--renderer vulkan` is strict
+  (exit code 3, no silent software fallback). The offscreen Vulkan instance turns the implicit
+  layers off (a failing driver made the Gamescope WSI layer abort the process: reproduced with a
+  failing test driver), and the game no longer inherits Steam's runtime folders in
+  `LD_LIBRARY_PATH` or its overlay in `LD_PRELOAD`.
 - **Launcher on Windows (Proton): the menu scrolled by itself.** A gamepad input that is already
   "pressed" when the controller is first seen (a second, phantom device, a raw HID node) is now
   ignored until it has been released once, directions are tracked per device with a hysteresis

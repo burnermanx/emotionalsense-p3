@@ -762,6 +762,7 @@ class App:
             return
         cmd, env = ui.es_main.game_command(prep.game_exe(), ui.data, ui.cfg)
         self.crashes_before = set(ui.es_main.crash_reports(ui.data))
+        self.game_started = time.time()
         ui.running = ui.es_main.spawn_game(cmd, env, ui.data)
         ui.message = ""
         # Out of the way while the game runs (it may be full screen); tick() brings
@@ -810,6 +811,7 @@ class App:
             self.pad.rearm()                   # held while the game had the pad: must be released first
             self.bring_back()
             self.check_crash(code)
+            self.check_renderer()
         if not self._anim:                     # a running transition paints on its own 60 Hz schedule
             self.redraw()
         # 16 ms while a transition animates (60 Hz), relaxed otherwise: key presses redraw on
@@ -831,8 +833,69 @@ class App:
             return
         CrashDialog(self, report, code)
 
+    def check_renderer(self):
+        """The game started without Vulkan (it ran the slow software renderer, or stopped because
+        --renderer vulkan allows no fallback): say so, with the report. A crash dialog, if one was
+        just shown, comes first; this one waits behind it."""
+        ui = self.ui
+        found = ui.es_main.renderer_report(ui.data, getattr(self, "game_started", 0.0))
+        if found:
+            RendererDialog(self, found[0], found[1])
+
     def run(self):
         self.root.mainloop()
+
+
+class RendererDialog:
+    """"Vulkan did not start": open the folder, copy the report, open an issue. Nothing is sent."""
+
+    def __init__(self, app: App, report: Path, result: str):
+        tk = app.tk
+        self.app, self.report, self.result = app, report, result
+        self.top = tk.Toplevel(app.root)
+        self.top.title(t("renderer.title"))
+        self.top.resizable(False, False)
+        self.top.transient(app.root)
+        app.modal += 1
+        self.top.bind("<Destroy>", lambda e: self._closed(e), add="+")
+        body = t("renderer.body", file=str(report.name), folder=short_path(report.parent, 560))
+        tk.Label(self.top, text=body, justify="left", wraplength=560, padx=18, pady=14).pack()
+        tk.Label(self.top, text=t("main.version", version=app.ui._version()), fg="#888", font=("TkDefaultFont", 8)).pack(anchor="e", padx=10)
+        row = tk.Frame(self.top)
+        row.pack(pady=(0, 14))
+        for label, fn in ((t("crash.open_folder"), self.open_folder), (t("crash.copy"), self.copy),
+                          (t("crash.issue"), self.issue), (t("crash.close"), self.top.destroy)):
+            tk.Button(row, text=label, command=fn, padx=8).pack(side="left", padx=6)
+        self.status = tk.Label(self.top, text="", fg="#2a7")
+        self.status.pack(pady=(0, 8))
+        try:
+            self.top.grab_set()
+        except Exception:                      # noqa: BLE001
+            pass
+
+    def _closed(self, e):
+        if e.widget is self.top and self.app.modal > 0:
+            self.app.modal -= 1
+            self.app.pad.rearm()
+
+    def open_folder(self):
+        try:
+            open_folder(self.report.parent)
+        except OSError as e:
+            self.status.config(text=str(e))
+
+    def copy(self):
+        try:
+            text = self.app.ui.es_main.scrub_paths(self.report.read_text(encoding="utf-8", errors="replace"))
+            self.app.root.clipboard_clear()
+            self.app.root.clipboard_append(text)
+            self.status.config(text=t("crash.copied"))
+        except OSError as e:
+            self.status.config(text=str(e))
+
+    def issue(self):
+        import webbrowser
+        webbrowser.open(self.app.ui.es_main.renderer_issue_url(self.report, self.result))
 
 
 class CrashDialog:
