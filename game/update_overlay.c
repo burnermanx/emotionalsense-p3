@@ -6,6 +6,7 @@
  * the replaced entries' size and offset changed, written once to
  * <data>/update/DATA.combined.TPA; the entries' contents are not interpreted. */
 #include "update_overlay.h"
+#include "psprecomp/log.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -68,8 +69,8 @@ int es_update_prepare(const char *data, char *combined, size_t cap) {
     tpa d, u;
     int rc = -1;
     memset(&d, 0, sizeof d); memset(&u, 0, sizeof u);
-    if (tpa_open(&d, disc_p) != 0) { fprintf(stderr, "update: the disc's DATA.TPA is not what was expected\n"); goto out; }
-    if (tpa_open(&u, upd_p) != 0) { fprintf(stderr, "update: %s is not a DATA.TPA (bad header or sizes); ignored\n", upd_p); goto out; }
+    if (tpa_open(&d, disc_p) != 0) { psp_log("update: the disc's DATA.TPA is not what was expected\n"); goto out; }
+    if (tpa_open(&u, upd_p) != 0) { psp_log("update: %s is not a DATA.TPA (bad header or sizes); ignored\n", upd_p); goto out; }
 
     /* Which disc entries the update replaces. */
     int *rep = (int *)malloc(sizeof(int) * d.count);
@@ -86,16 +87,16 @@ int es_update_prepare(const char *data, char *combined, size_t cap) {
             if (u.e[j].hash == d.e[i].hash && (mask >> j & 1)) { rep[i] = (int)j; nrep++; break; }
         total += rep[i] >= 0 ? u.e[rep[i]].size : d.e[i].size;
     }
-    if (nrep != u.count && !mk) fprintf(stderr, "update: %u of %u update entries have no match on the disc and are ignored\n",
+    if (nrep != u.count && !mk) psp_log("update: %u of %u update entries have no match on the disc and are ignored\n",
                                  u.count - nrep, u.count);
-    if (!nrep) { fprintf(stderr, "update: no entry of %s matches the disc; ignored\n", upd_p); free(rep); goto out; }
+    if (!nrep) { psp_log("update: no entry of %s matches the disc; ignored\n", upd_p); free(rep); goto out; }
 
     /* Reuse a combined file that is the right size and newer than both inputs. */
     if (!mk && stat(combined, &sc) == 0 && (uint64_t)sc.st_size == total &&
         sc.st_mtime >= su.st_mtime && sc.st_mtime >= sd.st_mtime) { free(rep); rc = 1; goto out; }
 
     FILE *o = fopen(tmp_p, "wb");
-    if (!o) { fprintf(stderr, "update: cannot write %s\n", tmp_p); free(rep); goto out; }
+    if (!o) { psp_log("update: cannot write %s\n", tmp_p); free(rep); goto out; }
     uint8_t hdr[12];
     wr32(hdr, 0x0004C0DAu); wr32(hdr + 4, d.count << 16); wr32(hdr + 8, (uint32_t)(total - 12));
     /* keep the low bits of the disc's second word */
@@ -114,10 +115,10 @@ int es_update_prepare(const char *data, char *combined, size_t cap) {
                            : copy_range(d.f, d.e[i].off, d.e[i].size, o);
     bad |= fclose(o) != 0;
     free(rep);
-    if (bad) { remove(tmp_p); fprintf(stderr, "update: could not build %s\n", combined); goto out; }
+    if (bad) { remove(tmp_p); psp_log("update: could not build %s\n", combined); goto out; }
     remove(combined);
-    if (rename(tmp_p, combined) != 0) { fprintf(stderr, "update: could not rename %s\n", tmp_p); goto out; }
-    printf("update: built %s (%u entries replaced)\n", combined, nrep);
+    if (rename(tmp_p, combined) != 0) { psp_log("update: could not rename %s\n", tmp_p); goto out; }
+    psp_out("update: built %s (%u entries replaced)\n", combined, nrep);
     rc = 1;
 out:
     tpa_close(&d); tpa_close(&u);

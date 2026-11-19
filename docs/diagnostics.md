@@ -5,6 +5,25 @@ The binary is `./build/game/EmotionalSense-P3-game` in a development tree (the
 launcher puts it in `<data>/game/`); the command-line arguments are
 `--data --scale --frames --capture --renderer vulkan|software|null --fps`.
 
+## Terminal output (off by default)
+
+The game and the launcher print **nothing** to the terminal by default; only a fatal error
+(game data missing, no window, the real-save refusal, a crash notice) gets through, in one or two
+lines. The diagnostic log (`confirm: cross`, `render: ...`, `poll[...]`, `exit: ...`, HLE and
+trace output) is switched on with any of:
+
+| Switch | Where |
+|---|---|
+| `--verbose` (`-v`) | game; and the launcher, which passes it on to the game it starts (and prints its own progress) |
+| `EMOTIONALSENSE_LOG=1` (or `PSPRECOMP_LOG=1`) | game |
+| any `EMOTIONALSENSE_TRACE_*` or `PSPRECOMP_TRACE_*` variable | game: implies the log |
+
+`EMOTIONALSENSE_POLL`, `EMOTIONALSENSE_POKE` and the test routes print through the same log, so
+a script that reads them must set `EMOTIONALSENSE_LOG=1` (`scripts/check_scripts.sh` does). The
+crash report's "last log lines" are kept with the log **off** as well. Output of other libraries
+(Vulkan loader, Mesa, the Gamescope layer) is theirs: it is neither hidden nor changed. Messages go
+to stderr (the former stdout lines too); `--version` and `--help` still print on stdout.
+
 ## Variables
 
 | Variable | Effect | Notes |
@@ -136,7 +155,7 @@ stack. `EMOTIONALSENSE_CRASH_TEST=segv|abort|guest|hang` produces each kind.
 ## Recipes
 
 ```sh
-# headless with a capture
+# headless with a capture (add EMOTIONALSENSE_LOG=1 or --verbose to see the log)
 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
   ./build/game/EmotionalSense-P3-game --data <copy of the data> --renderer software \
   --frames 6500 --capture out.ppm
@@ -146,7 +165,7 @@ EMOTIONALSENSE_SCRIPT=@scripts/gameplay.script \
   ./build/game/EmotionalSense-P3-game --data <copy of the data> --renderer null --frames 4000
 
 # scene state and the anti-copy check
-EMOTIONALSENSE_POLL=0x0805E874,0x0013027C,0x00130304 \
+EMOTIONALSENSE_LOG=1 EMOTIONALSENSE_POLL=0x0805E874,0x0013027C,0x00130304 \
   ./build/game/EmotionalSense-P3-game --data <copy of the data> --frames 3000
 
 # guest clock against the real one

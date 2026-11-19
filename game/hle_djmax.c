@@ -8,6 +8,7 @@
  */
 
 #include <psprecomp/hle.h>
+#include "psprecomp/log.h"
 #include <psprecomp/cpu.h>
 #include <psprecomp/dispatch.h>
 #include <psprecomp/mem.h>
@@ -42,9 +43,9 @@ static void av_hexdump(const char *what, uint32_t addr, uint32_t n) {
     if (!addr) return;
     uint8_t *p = (uint8_t *)psp_mem_ptr(addr, n);
     if (!p) return;
-    fprintf(stderr, "av: %s @0x%08X:", what, addr);
-    for (uint32_t i = 0; i < n; i++) fprintf(stderr, " %02x", p[i]);
-    fputc('\n', stderr);
+    psp_log("av: %s @0x%08X:", what, addr);
+    for (uint32_t i = 0; i < n; i++) psp_log(" %02x", p[i]);
+    psp_log_putc('\n');
 }
 
 /* ---- sceUmdUser ----------------------------------------------------------
@@ -75,7 +76,7 @@ static void hle_UmdRegisterUMDCallBack(void) {
     if (g_umd_cbid)
         psp_callback_notify(g_umd_cbid, PSP_UMD_PRESENT | PSP_UMD_READABLE | PSP_UMD_READY);
     if (getenv("EMOTIONALSENSE_TRACE_UMD"))
-        fprintf(stderr, "umd: register cbid=%u valid=%d\n", g_umd_cbid, psp_callback_valid(g_umd_cbid));
+        psp_log("umd: register cbid=%u valid=%d\n", g_umd_cbid, psp_callback_valid(g_umd_cbid));
     psp_ret(SCE_KERNEL_ERROR_OK);
 }
 
@@ -189,7 +190,7 @@ static void hle_UtilityGetSystemParamInt(void) {
      * done on the sceCtrl value, see host.c), but a system dialog would. */
     if (id == 9) val = g_confirm_cross ? 1 : 0;
     if (getenv("EMOTIONALSENSE_TRACE_UTIL"))
-        fprintf(stderr, "util: GetSystemParamInt id=%u -> %u\n", id, val);
+        psp_log("util: GetSystemParamInt id=%u -> %u\n", id, val);
     if (out) psp_write32(out, val);
     psp_ret(SCE_KERNEL_ERROR_OK);
 }
@@ -265,7 +266,7 @@ static void hle_SavedataInitStart(void) {
             snprintf(path, sizeof path, "%s/ms/PSP/SAVEDATA/%s/%s",
                      psp_io_root(), esc, file);
             if (getenv("EMOTIONALSENSE_TRACE_UTIL"))
-                fprintf(stderr, "util: SavedataInitStart mode=%u path=%s vblank=%llu size=%u ra=0x%08X\n",
+                psp_log("util: SavedataInitStart mode=%u path=%s vblank=%llu size=%u ra=0x%08X\n",
                         mode, path, (unsigned long long)psp_display_vblanks(),
                         psp_read32(params + SD_DATASIZE), psp_cpu.r[PSP_REG_RA]);
             if (mode == 1) {          /* SAVE */
@@ -357,7 +358,7 @@ static void hle_InstallGetStatus(void) {
 static uint32_t g_vaudio_samples = 1024;
 
 static void hle_VaudioChReserve(void) {
-    if (av_trace()) fprintf(stderr, "av: VaudioChReserve samples=%u freq=%u ch=%u\n", psp_arg(0), psp_arg(1), psp_arg(2));
+    if (av_trace()) psp_log("av: VaudioChReserve samples=%u freq=%u ch=%u\n", psp_arg(0), psp_arg(1), psp_arg(2));
     g_vaudio_samples = psp_arg(0) ? psp_arg(0) : 1024;
     psp_ret(SCE_KERNEL_ERROR_OK);
 }
@@ -389,7 +390,7 @@ static void hle_VaudioOutputBlocking(void) {
         }
         if (ms && !done && psp_display_vblanks() >= at) {
             done = 1;
-            fprintf(stderr, "exp: music stalled %llu ms at vblank %llu\n",
+            psp_log("exp: music stalled %llu ms at vblank %llu\n",
                     (unsigned long long)ms, (unsigned long long)psp_display_vblanks());
             psp_threadman_sleep_real(ms * 1000u);
         }
@@ -397,7 +398,7 @@ static void hle_VaudioOutputBlocking(void) {
     if (av_trace()) {
         static uint32_t blocks;
         if (++blocks % 100 == 1)
-            fprintf(stderr, "vaudio[%llu]: block %u t=%.3f\n",
+            psp_log("vaudio[%llu]: block %u t=%.3f\n",
                     (unsigned long long)psp_display_vblanks(), blocks,
                     (double)psp_clock_us() / 1e6);
     }
@@ -461,7 +462,7 @@ static void hle_AtracSetDataAndGetID(void) {
     uint32_t buf  = psp_arg(0);
     uint32_t size = psp_arg(1);
     if (av_trace()) {
-        fprintf(stderr, "av: AtracSetDataAndGetID buf=0x%08X size=%u\n", buf, size);
+        psp_log("av: AtracSetDataAndGetID buf=0x%08X size=%u\n", buf, size);
         av_hexdump("atrac hdr", buf, 64);
     }
     const uint8_t *src = size >= 12 ? (const uint8_t *)psp_mem_ptr(buf, size) : NULL;
@@ -508,7 +509,7 @@ static void hle_AtracSetDataAndGetID(void) {
         /* 0xFFFE (extensible) and 0x270 are ATRAC3+/ATRAC3 respectively. */
         a->dec = at3_open(tag != 0x270, a->channels, (int)rate, (int)a->align, extra, extra_n);
         if (!a->dec) {
-            fprintf(stderr, "emotionalsense: cannot open ATRAC decoder (tag 0x%X)\n", tag);
+            psp_log("emotionalsense: cannot open ATRAC decoder (tag 0x%X)\n", tag);
             atrac_free(a);
             psp_ret(0x80630006u);
             return;
@@ -517,7 +518,7 @@ static void hle_AtracSetDataAndGetID(void) {
         a->buf = buf;
         a->buf_size = size;
         if (av_trace())
-            fprintf(stderr, "av: atrac id=%d file=%u data_off=%u frames=%u align=%u ch=%d samples=%u\n",
+            psp_log("av: atrac id=%d file=%u data_off=%u frames=%u align=%u ch=%d samples=%u\n",
                     i, a->file_size, a->data_off, a->total_frames, a->align, a->channels, a->total_samples);
         psp_ret((uint32_t)i);
         return;
@@ -562,7 +563,7 @@ static void hle_AtracDecodeData(void) {
         memset(dst + (size_t)n * a->channels, 0, (size_t)(AT3_FRAME_SAMPLES - n) * a->channels * 2);
     if (av_trace()) {
         static int cnt;
-        if (cnt++ < 20 || end) fprintf(stderr, "av: atrac Decode id=%u pos=%u/%u n=%d end=%d ready=%u\n",
+        if (cnt++ < 20 || end) psp_log("av: atrac Decode id=%u pos=%u/%u n=%d end=%d ready=%u\n",
                                        psp_arg(0), a->pos, a->total_frames, n, end, atrac_ready_frames(a));
     }
     if (out_n)      psp_write32(out_n, (uint32_t)n);
@@ -599,7 +600,7 @@ static void hle_AtracGetStreamDataInfo(void) {
         writable = a->file_size - a->filled;
         if (writable > a->buf_size) writable = a->buf_size;
     }
-    if (av_trace()) fprintf(stderr, "av: atrac GetStreamDataInfo id=%u -> ptr=0x%08X writable=%u ofs=%u\n", psp_arg(0), buf, writable, ofs);
+    if (av_trace()) psp_log("av: atrac GetStreamDataInfo id=%u -> ptr=0x%08X writable=%u ofs=%u\n", psp_arg(0), buf, writable, ofs);
     if (p_ptr)  psp_write32(p_ptr, buf);
     if (p_byts) psp_write32(p_byts, writable);
     if (p_ofs)  psp_write32(p_ofs, ofs);
@@ -611,7 +612,7 @@ static void hle_AtracAddStreamData(void) {
     djmax_atrac *a = atrac_arg();
     uint32_t n = psp_arg(1);
     if (!a) { psp_ret(0x80630003u); return; }
-    if (av_trace()) fprintf(stderr, "av: atrac AddStreamData id=%u n=%u filled=%u/%u\n", psp_arg(0), n, a->filled, a->file_size);
+    if (av_trace()) psp_log("av: atrac AddStreamData id=%u n=%u filled=%u/%u\n", psp_arg(0), n, a->filled, a->file_size);
     if (n > a->file_size - a->filled) n = a->file_size - a->filled;
     if (n > a->buf_size) n = a->buf_size;
     const uint8_t *src = n ? (const uint8_t *)psp_mem_ptr(a->buf, n) : NULL;
@@ -818,7 +819,7 @@ static void demux_pack(const uint8_t *p) {
                 size_t plen = blen - 3 - hl;
                 if (mpeg_trace()) {
                     if (g_demux_trace_count++ < 80)
-                        fprintf(stderr, "mpeg[%llu]: pack sid=0x%02X ln=%zu hl=%zu plen=%zu has=%d pts=%llu vidpush=%llu audpush=%llu\n",
+                        psp_log("mpeg[%llu]: pack sid=0x%02X ln=%zu hl=%zu plen=%zu has=%d pts=%llu vidpush=%llu audpush=%llu\n",
                                 (unsigned long long)psp_display_vblanks(), sid, ln, hl, plen, has,
                                 (unsigned long long)pts, (unsigned long long)g_vid.pushed,
                                 (unsigned long long)g_aud.pushed);
@@ -853,7 +854,7 @@ static int32_t rb_free_pkts(void) {
         fifo_pop(&g_aud, drop);
         g_aud_consumed += drop;
         held = g_vid.len + g_aud.len + g_au_len * (size_t)g_au_valid;
-        if (mpeg_trace()) fprintf(stderr, "mpeg[%llu]: dropped %zu audio bytes (vid=%zu aud=%zu)\n",
+        if (mpeg_trace()) psp_log("mpeg[%llu]: dropped %zu audio bytes (vid=%zu aud=%zu)\n",
                                   (unsigned long long)psp_display_vblanks(), drop, g_vid.len, g_aud.len);
     }
     if (held > 1024 * 1024) return 0;
@@ -889,7 +890,7 @@ static void hle_MpegQueryStreamSize(void) {
         g_stream_size = sz;
         g_sig_have = 0;
     }
-    if (mpeg_trace()) fprintf(stderr, "mpeg[%llu]: QueryStreamSize %u\n",
+    if (mpeg_trace()) psp_log("mpeg[%llu]: QueryStreamSize %u\n",
                               (unsigned long long)psp_display_vblanks(), sz);
     if (out_size) psp_write32(out_size, sz);
     psp_ret(SCE_KERNEL_ERROR_OK);
@@ -909,7 +910,7 @@ static void hle_MpegRingbufferConstruct(void) {
     uint32_t data = psp_arg(2);
     uint32_t cb   = psp_arg(4);
     uint32_t arg  = psp_arg(5);
-    if (av_trace()) fprintf(stderr, "av: MpegRingbufferConstruct pkts=%d data=0x%08X size=%u cb=0x%08X\n",
+    if (av_trace()) psp_log("av: MpegRingbufferConstruct pkts=%d data=0x%08X size=%u cb=0x%08X\n",
                             pkts, data, psp_arg(3), cb);
 
     g_rb_addr       = rb;
@@ -919,7 +920,7 @@ static void hle_MpegRingbufferConstruct(void) {
     g_rb_cb         = cb;
     g_rb_cb_arg     = arg;
     mpeg_reset_streams();
-    if (mpeg_trace()) fprintf(stderr, "mpeg[%llu]: RingbufferConstruct rb=0x%08X pkts=%d data=0x%08X cb=0x%08X arg=0x%08X\n",
+    if (mpeg_trace()) psp_log("mpeg[%llu]: RingbufferConstruct rb=0x%08X pkts=%d data=0x%08X cb=0x%08X arg=0x%08X\n",
                               (unsigned long long)psp_display_vblanks(), rb, g_rb_total_pkts, data, cb, arg);
 
     if (rb) {
@@ -1003,18 +1004,18 @@ static void hle_MpegRingbufferPut(void) {
         want -= added;
     }
     if (mpeg_trace()) {
-        fprintf(stderr, "mpeg[%llu]: RingbufferPut uid=%u req=%d avail=%d free=%d -> %d vid=%zu aud=%zu eof=%d wp=%d raw=%llu",
+        psp_log("mpeg[%llu]: RingbufferPut uid=%u req=%d avail=%d free=%d -> %d vid=%zu aud=%zu eof=%d wp=%d raw=%llu",
                 (unsigned long long)psp_display_vblanks(), psp_threadman_current_uid(),
                 (int)psp_arg(1), avail, free_pkts,
                 total, g_vid.len, g_aud.len, g_rb_eof, g_rb_wp,
                 (unsigned long long)g_raw_demuxed);
         if (g_rb_cb_arg) {
             uint32_t ctx = psp_read32(g_rb_cb_arg);
-            fprintf(stderr, " ctx=%08X:", ctx);
-            for (int i = 0; i < 6; i++) fprintf(stderr, " %08X", psp_read32(ctx + (uint32_t)i * 4));
-            fprintf(stderr, " | %08X %08X %08X", psp_read32(ctx + 32), psp_read32(ctx + 48), psp_read32(ctx + 64));
+            psp_log(" ctx=%08X:", ctx);
+            for (int i = 0; i < 6; i++) psp_log(" %08X", psp_read32(ctx + (uint32_t)i * 4));
+            psp_log(" | %08X %08X %08X", psp_read32(ctx + 32), psp_read32(ctx + 48), psp_read32(ctx + 64));
         }
-        fputc('\n', stderr);
+        psp_log_putc('\n');
     }
     if (g_rb_addr) {
         psp_write32(g_rb_addr + 8, psp_read32(g_rb_addr + 8) + (uint32_t)total);
@@ -1027,7 +1028,7 @@ static void hle_MpegCreate(void) {
     uint32_t mpeg = psp_arg(0);
     uint32_t data = psp_arg(1);
     if (mpeg) psp_write32(mpeg, data ? data : mpeg);
-    if (mpeg_trace()) fprintf(stderr, "mpeg[%llu]: Create mpeg=0x%08X data=0x%08X\n",
+    if (mpeg_trace()) psp_log("mpeg[%llu]: Create mpeg=0x%08X data=0x%08X\n",
                               (unsigned long long)psp_display_vblanks(), mpeg, data);
     mpeg_reset_streams();
     g_have_vid_stream = g_have_aud_stream = 0;
@@ -1035,7 +1036,7 @@ static void hle_MpegCreate(void) {
 }
 
 static void hle_MpegDelete(void) {
-    if (mpeg_trace()) fprintf(stderr, "mpeg[%llu]: Delete vid=%zu aud=%zu\n",
+    if (mpeg_trace()) psp_log("mpeg[%llu]: Delete vid=%zu aud=%zu\n",
                               (unsigned long long)psp_display_vblanks(), g_vid.len, g_aud.len);
     mpeg_reset_streams();
     g_have_vid_stream = g_have_aud_stream = 0;
@@ -1116,7 +1117,7 @@ static void hle_MpegGetAvcAu(void) {
 
     uint8_t *d = fifo_ptr(&g_vid);
     size_t n = g_vid.len;
-    if (mpeg_trace()) fprintf(stderr, "mpeg[%llu]: GetAvcAu n=%zu vts=%d eof=%d uid=%u\n",
+    if (mpeg_trace()) psp_log("mpeg[%llu]: GetAvcAu n=%zu vts=%d eof=%d uid=%u\n",
                               (unsigned long long)psp_display_vblanks(), n, g_vts.n, g_rb_eof,
                               psp_threadman_current_uid());
     if (n == 0) { psp_ret(SCE_MPEG_ERROR_NO_DATA); return; }
@@ -1173,22 +1174,22 @@ static void hle_MpegGetAvcAu(void) {
     uint64_t pts = 0, dts = 0, out_dts = 0;
     ts_take(&g_vts, g_vid_consumed, &pts, &dts);
     uint64_t vpts = ts_interp_next(&g_vts_i, pts, dts, 3003, 1, &out_dts);
-    if (mpeg_trace()) fprintf(stderr, "mpeg[%llu]: AvcAu pts=%llu len=%zu\n",
+    if (mpeg_trace()) psp_log("mpeg[%llu]: AvcAu pts=%llu len=%zu\n",
                               (unsigned long long)psp_display_vblanks(),
                               (unsigned long long)vpts, len);
     fifo_pop(&g_vid, len);
     g_vid_consumed += len;
     rb_sync_struct();
     au_write(au, vpts, out_dts, (uint32_t)len);
-    if (mpeg_trace()) fprintf(stderr, "mpeg[%llu]: GetAvcAu AU len=%zu pts=%llu dts=%llu s=%ld e=%ld\n",
+    if (mpeg_trace()) psp_log("mpeg[%llu]: GetAvcAu AU len=%zu pts=%llu dts=%llu s=%ld e=%ld\n",
                               (unsigned long long)psp_display_vblanks(), len,
                               (unsigned long long)vpts, (unsigned long long)out_dts, s, e);
     if (mpeg_trace() && len <= 64) {
         static int c;
         if (c++ < 6) {
-            fprintf(stderr, "mpeg: small AU bytes:");
-            for (size_t i = 0; i < len && i < 64; i++) fprintf(stderr, " %02x", g_au_buf[i]);
-            fputc('\n', stderr);
+            psp_log("mpeg: small AU bytes:");
+            for (size_t i = 0; i < len && i < 64; i++) psp_log(" %02x", g_au_buf[i]);
+            psp_log_putc('\n');
         }
     }
     psp_ret(SCE_KERNEL_ERROR_OK);
@@ -1208,7 +1209,7 @@ static void hle_MpegGetAtracAu(void) {
         fifo_pop(&g_aud, 1); g_aud_consumed++;
     }
     if (g_aud.len < AT3_AU_HDR + AT3_BLOCK) {
-        if (mpeg_trace()) fprintf(stderr, "mpeg[%llu]: GetAtracAu NO_DATA aud=%zu eof=%d\n",
+        if (mpeg_trace()) psp_log("mpeg[%llu]: GetAtracAu NO_DATA aud=%zu eof=%d\n",
                                   (unsigned long long)psp_display_vblanks(), g_aud.len, g_rb_eof);
         psp_ret(SCE_MPEG_ERROR_NO_DATA); return;
     }
@@ -1226,7 +1227,7 @@ static void hle_MpegGetAtracAu(void) {
 }
 
 static void hle_MpegFlushAllStream(void) {
-    if (mpeg_trace()) fprintf(stderr, "mpeg[%llu]: FlushAllStream vid=%zu aud=%zu\n",
+    if (mpeg_trace()) psp_log("mpeg[%llu]: FlushAllStream vid=%zu aud=%zu\n",
                               (unsigned long long)psp_display_vblanks(), g_vid.len, g_aud.len);
     mpeg_reset_streams();
     rb_sync_struct();
@@ -1262,10 +1263,10 @@ static void hle_MpegAvcDecodeYCbCr(void) {
     }
     if (av_trace()) {
         static int c;
-        if (c++ < 30) fprintf(stderr, "av: avc decode got=%d (%dx%d)\n", got, avc_width(g_avc), avc_height(g_avc));
+        if (c++ < 30) psp_log("av: avc decode got=%d (%dx%d)\n", got, avc_width(g_avc), avc_height(g_avc));
     }
     if (mpeg_trace() && got <= 0)
-        fprintf(stderr, "mpeg[%llu]: AvcDecodeYCbCr got=%d au_len=%zu au_valid=%d\n",
+        psp_log("mpeg[%llu]: AvcDecodeYCbCr got=%d au_len=%zu au_valid=%d\n",
                 (unsigned long long)psp_display_vblanks(), got, g_au_len, g_au_valid);
     if (init_flag) psp_write32(init_flag, 1u);
     psp_ret(SCE_KERNEL_ERROR_OK);
@@ -1309,7 +1310,7 @@ static void hle_MpegAvcCsc(void) {
     }
     if (av_trace()) {
         static int c;
-        if (c++ < 30) fprintf(stderr, "av: avc csc dest=0x%08X stride=%u range=%dx%d rc=%d\n", dest, stride, w, h, rc);
+        if (c++ < 30) psp_log("av: avc csc dest=0x%08X stride=%u range=%dx%d rc=%d\n", dest, stride, w, h, rc);
     }
     psp_ret(SCE_KERNEL_ERROR_OK);
 }
@@ -1327,7 +1328,7 @@ static void hle_MpegAtracDecode(void) {
     if (dst && n < 2048) memset(dst + (size_t)n * 2, 0, (size_t)(2048 - n) * 4);
     if (av_trace()) {
         static int c;
-        if (c++ < 10) fprintf(stderr, "av: mpeg atrac decode n=%d\n", n);
+        if (c++ < 10) psp_log("av: mpeg atrac decode n=%d\n", n);
     }
     if (init_flg) psp_write32(init_flg, 1u);
     psp_ret(SCE_KERNEL_ERROR_OK);

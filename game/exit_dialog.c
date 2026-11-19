@@ -26,6 +26,7 @@
 #include <string.h>
 
 #include "exit_text.h"
+#include "psprecomp/log.h"
 
 #define PAD_UP     0x0010u
 #define PAD_RIGHT  0x0020u
@@ -84,7 +85,7 @@ static int on_title(void) {
 static void open_dialog(void) {
     atomic_store(&g_sel, 1);        /* default: No */
     atomic_store(&g_open, 1);
-    fprintf(stderr, "exit: confirmation opened\n");
+    psp_log("exit: confirmation opened\n");
 }
 
 /* Called by psprecomp for every read of the pad; returns what the game sees. */
@@ -123,13 +124,13 @@ uint32_t es_exit_filter(uint32_t btns) {
     int cancel_edge = (cancel && !prev_cancel) || esc;
     prev_dir = dir; prev_confirm = confirm; prev_cancel = cancel != 0;
     if (confirm_edge && sel == 0) {
-        fprintf(stderr, "exit: yes, closing the game\n");
+        psp_log("exit: yes, closing the game\n");
         atomic_store(&g_open, 0);
         psp_window_request_close();
         return 0;
     }
     if ((confirm_edge && sel == 1) || cancel_edge) {
-        fprintf(stderr, "exit: dialog closed, staying\n");
+        psp_log("exit: dialog closed, staying\n");
         atomic_store(&g_open, 0);
         title_reads = 0;                      /* wait for a steady title again */
         hold_mask = (int)btns;
@@ -216,7 +217,7 @@ void es_exit_init(int confirm_cross) {
     g_confirm_cross = confirm_cross != 0;
     {   const char *e = getenv("EMOTIONALSENSE_EXIT_DIALOG");
         if (e && !strcmp(e, "0")) g_enabled = 0; }
-    printf("exit dialog: %s, language %s\n", g_enabled ? "on" : "off", es_exit_lang_codes[g_lang]);
+    psp_out("exit dialog: %s, language %s\n", g_enabled ? "on" : "off", es_exit_lang_codes[g_lang]);
     psp_ctrl_set_filter(es_exit_filter);
     psp_window_set_overlay(es_exit_overlay);
 }

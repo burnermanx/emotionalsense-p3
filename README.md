@@ -16,8 +16,9 @@
 
 ## What you need
 
-- Your own **ISO of the Korean version of DJMAX Portable 3 (`ULKS46236`)**. Other
-  regions and other titles are refused.
+- Your own **ISO of the Korean version of DJMAX Portable 3 (`ULKS46236`)**, or a
+  **CHD** made from it (see [CHD images](#chd-images)). Other regions and other titles
+  are refused.
 - Optionally, the Korean **1.02 data update** (the folder that holds
   `PSP/GAME/ULKS46236/DATA.TPA`); see [`docs/update-1.02.md`](docs/update-1.02.md).
   The update's own patcher is never run.
@@ -49,7 +50,7 @@ the AppImage executable and run it, or unpack the `tar.gz` and run
 
 ## First use
 
-1. Start the launcher and choose your ISO. It extracts the disc, decrypts
+1. Start the launcher and choose your ISO or CHD. It extracts the disc, decrypts
    `EBOOT.BIN`, recompiles the game to C and compiles it with the compiler it
    carries. This happens once (about half a minute on a modern 16-thread
    machine) and again when the launcher or the ISO changes.
@@ -155,15 +156,37 @@ for 20 s) writes a report too, and the game keeps running.
   Data Install is not needed; nothing is wrong.
 - Open an issue with the crash report for anything else.
 
+## CHD images
+
+The launcher reads **CHD** files as well as ISOs, so the game can stay compressed on
+disk (about 14% smaller than the ISO). It uses [libchdr](https://github.com/rtissera/libchdr)
+(the CHD reader of PPSSPP and RetroArch) and only reads the file: no temporary ISO is
+written, and the check against the known dump is made on the decoded data, so a CHD
+made from a good ISO passes it like the ISO does.
+
+Supported: a CHD of the disc as a **DVD/UMD image** (`chdman createdvd -i game.iso -o
+game.chd`, any compression, including `-c zstd`) or as a **CD image** whose first track
+is data, mode 1 or mode 2 form 1, cooked or raw (`chdman createcd -i game.cue -o
+game.chd`). Audio-first discs, GD-ROM and hard-disk CHDs, and CHDs that need a parent
+file are refused with a message; so is a damaged or truncated CHD. `chdman` comes with
+MAME ("mame-tools" in most distributions). Choose the `.chd` in the launcher, or pass it
+to `--iso`.
+
 ## Command line
 
 For scripts and CI: `EmotionalSense-P3 --iso game.iso --prepare`, `--run`,
+`--verbose`,
 `--backup-save`, `--selftest`, `--lang xx`, `--data DIR`,
 `--confirm auto|circle|cross`, `--update FOLDER` / `--remove-update`,
 `--migrate-legacy`. The game binary has `--version`, `--help`
 and the `EMOTIONALSENSE_*` variables listed in
 [`docs/diagnostics.md`](docs/diagnostics.md). The launcher is `EmotionalSense-P3`
 and the game it starts is `EmotionalSense-P3-game` (`.exe` on Windows).
+
+The launcher and the game print nothing to the terminal unless something stops them
+from running. `--verbose` makes the launcher print its progress and the game its
+diagnostic log (also `EMOTIONALSENSE_LOG=1` for the game; see
+[`docs/diagnostics.md`](docs/diagnostics.md)).
 
 ## Building from source
 

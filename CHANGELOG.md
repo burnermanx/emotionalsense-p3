@@ -23,6 +23,14 @@ ISO, on Linux and Windows, x86-64 and arm64.
   compiler that travels in its kit (zig on Linux, llvm-mingw on Windows): no CMake, git,
   system compiler or network needed. Command line for scripts (`--iso --prepare`, `--run`,
   `--backup-save`, `--selftest`, `--update`, `--migrate-legacy`).
+- **CHD images**: the launcher reads CHD files (`chdman createdvd` or `createcd`, any
+  compression) in place of the ISO, with libchdr (BSD-3-Clause) loaded from the kit; the
+  file is only read, never converted to a temporary ISO, and the check against the known
+  dump is made on the decoded data. `--iso` accepts `.chd`.
+- **Quiet by default**: the launcher and the game print nothing to the terminal unless a
+  fatal error stops them; `--verbose` (launcher, passed to the game), `--verbose` or
+  `EMOTIONALSENSE_LOG=1` (game) and any `EMOTIONALSENSE_TRACE_*` turn the log on. The crash
+  report still carries the last log lines. Other libraries' output is untouched.
 - **Six packages** (`EmotionalSense-P3-<version>-{windows-x86_64.zip, windows-arm64.zip,
   linux-x86_64.AppImage, linux-x86_64.tar.gz, linux-aarch64.AppImage,
   linux-aarch64.tar.gz}` + `SHA256SUMS`), built natively by `release.yml`;
@@ -60,6 +68,15 @@ ISO, on Linux and Windows, x86-64 and arm64.
 
 ### Fixed
 
+- **Steam Deck (Game Mode) crash of the AppImage**: the launcher started the game and every other
+  program with PyInstaller's `_internal` folder first in `LD_LIBRARY_PATH`, so the build machine's
+  libstdc++, libz, libzstd, libexpat... shadowed the system's inside the game; a graphics driver
+  that then failed to initialise made the Gamescope WSI layer assert and abort the process. Every
+  program the launcher starts now gets the environment the system gave the launcher
+  (`launcher/es_env.py`, covered by a test).
+- Launcher menus react at once: a key or pad press redraws within one 60 Hz frame (the frame goes
+  to Tk as raw PPM, about 6x cheaper than PNG+base64; no timer wait), the pad is polled at 120 Hz
+  and holds repeat like console menus (350 ms, then about 13 a second, one step per poll).
 - The song unlock used to write 1500 contiguous bytes at the wrong address every frame,
   which corrupted the music-select list and hung the game.
 - A `jal` is no longer split from its delay slot when a `lui`+`addiu` constant happens to

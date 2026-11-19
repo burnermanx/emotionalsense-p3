@@ -202,7 +202,7 @@ is not part of the repository.)
 
 ```sh
 EMOTIONALSENSE_SCRIPT=@scripts/gameplay_fast.script \
-EMOTIONALSENSE_POKE=0x088D12CC:0x42C80000 \
+EMOTIONALSENSE_LOG=1 EMOTIONALSENSE_POKE=0x088D12CC:0x42C80000 \
 EMOTIONALSENSE_TRACE_HLE_THREAD=262154 \
 ./build/game/EmotionalSense-P3-game --data <copy of the data> --frames 2500 --renderer null \
   > /tmp/rate.log 2>&1

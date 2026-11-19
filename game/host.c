@@ -18,6 +18,7 @@
  * screen, F11 full screen at the chosen rate. */
 
 #include <psprecomp/cpu.h>
+#include "psprecomp/log.h"
 #include <psprecomp/mem.h>
 #include <psprecomp/hle.h>
 #include <psprecomp/module.h>
@@ -186,12 +187,12 @@ static int es_auto_confirm_cross(char *why, size_t n) {
 /* EMOTIONALSENSE_FN_WATCH=0xADDR: one line per entry to that guest function
  * (vblank, scene, return address, call chain). Debugging aid. */
 static void fn_watch_hit(uint32_t addr) {
-    fprintf(stderr, "fn[%llu] 0x%08X scene=%u ra=0x%08X calls", (unsigned long long)psp_display_vblanks(),
+    psp_log("fn[%llu] 0x%08X scene=%u ra=0x%08X calls", (unsigned long long)psp_display_vblanks(),
             addr, psp_scene_now(), psp_cpu.r[PSP_REG_RA]);
     int n = 0;
     for (const psp_frame *f = psp_cpu.frame; f && f->ret && n < 8; f = f->prev, n++)
-        fprintf(stderr, " 0x%08X", f->ret);
-    fputc('\n', stderr);
+        psp_log(" 0x%08X", f->ret);
+    psp_log_putc('\n');
 }
 
 /* Resolve an EMOTIONALSENSE_POKE address expression; 0 if a link is not valid. */
@@ -282,13 +283,14 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--fullscreen") && i + 1 < argc) fullscreen = argv[++i];
         else if (!strcmp(argv[i], "--fever") && i + 1 < argc)    fever = argv[++i];
         else if (!strcmp(argv[i], "--score") && i + 1 < argc)    score_mode = argv[++i];
+        else if (!strcmp(argv[i], "--verbose") || !strcmp(argv[i], "-v")) psp_log_enable(1);
         else if (!strcmp(argv[i], "--version") || !strcmp(argv[i], "-V")) {
             printf("EmotionalSense-P3-game %s (psprecomp %s)\n",
                    EMOTIONALSENSE_VERSION_FULL, EMOTIONALSENSE_PSPRECOMP);
             return 0;
         }
         else if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) {
-            printf("usage: %s [--data <dir>] [--scale N] [--internal-scale N|auto] [--tex-filter nearest|linear|auto] [--fps N] [--frames N] [--capture file.ppm] [--renderer vulkan|software|null] [--confirm circle|cross|auto] [--fullscreen 1|0|auto] [--fever respect|original] [--score respect|original] [--version]\n", argv[0]);
+            printf("usage: %s [--data <dir>] [--scale N] [--internal-scale N|auto] [--tex-filter nearest|linear|auto] [--fps N] [--frames N] [--capture file.ppm] [--renderer vulkan|software|null] [--confirm circle|cross|auto] [--fullscreen 1|0|auto] [--fever respect|original] [--score respect|original] [--verbose] [--version]\n\nNothing is printed by default except fatal errors; --verbose (or EMOTIONALSENSE_LOG=1, or any EMOTIONALSENSE_TRACE_* variable) prints the diagnostic log\n", argv[0]);
             return 0;
         }
     }
@@ -299,13 +301,13 @@ int main(int argc, char **argv) {
     if (fever && *fever) {
         if (!strcmp(fever, "original")) djmax_fever_respect = 0;
         else if (strcmp(fever, "respect"))
-            fprintf(stderr, "emotionalsense: unknown fever mode '%s', using respect\n", fever);
+            psp_log("emotionalsense: unknown fever mode '%s', using respect\n", fever);
     }
     djmax_score_respect = 1;                      /* the default */
     if (score_mode && *score_mode) {
         if (!strcmp(score_mode, "original")) djmax_score_respect = 0;
         else if (strcmp(score_mode, "respect"))
-            fprintf(stderr, "emotionalsense: unknown score mode '%s', using respect\n", score_mode);
+            psp_log("emotionalsense: unknown score mode '%s', using respect\n", score_mode);
     }
     snprintf(elf, sizeof elf, "%s/module/eboot.elf", data);
     if (!is_file(elf) && !data_explicit) {
@@ -326,7 +328,7 @@ int main(int argc, char **argv) {
         }
     }
     if (!is_file(elf)) {
-        fprintf(stderr,
+        psp_fatal(
             "emotionalsense: game data not found in %s\n"
             "Run the EmotionalSense-P3 launcher with your DJMAX Portable 3 ISO first.\n", data);
         return 1;
@@ -334,21 +336,21 @@ int main(int argc, char **argv) {
     if (data_is_repo_work_data(data)) {
         const char *ok = getenv("EMOTIONALSENSE_ALLOW_REAL_DATA");
         if (!(ok && !strcmp(ok, "1"))) {
-            fprintf(stderr,
+            psp_fatal(
                 "emotionalsense: %s is the repository's work/data (the real save). Refusing to run "
                 "against it; use a copy, or set EMOTIONALSENSE_ALLOW_REAL_DATA=1 on purpose.\n", data);
             return 1;
         }
     }
-    printf("fever: %s\n", djmax_fever_respect ? "respect" : "original");
-    printf("score: %s\n", djmax_score_respect ? "respect" : "original");
+    psp_out("fever: %s\n", djmax_fever_respect ? "respect" : "original");
+    psp_out("score: %s\n", djmax_score_respect ? "respect" : "original");
     djmax_score_set_dir(data);
-    printf("data: %s\n", data);
+    psp_out("data: %s\n", data);
     snprintf(ms, sizeof ms, "%s/ms", data);
     host_mkdir(ms);
     es_crash_init(data);             /* crash/hang reports in <data>/crashes (game/crash.c) */
 
-    if (psp_mem_init() != 0) { fprintf(stderr, "memory init failed\n"); return 1; }
+    if (psp_mem_init() != 0) { psp_fatal("memory init failed\n"); return 1; }
     psp_module m;
     if (psp_module_load(elf, MODULE_SPAN, &m) != 0) return 1;
     psp_cpu_reset();
@@ -359,13 +361,13 @@ int main(int argc, char **argv) {
         int cross;
         if (!confirm || !*confirm || !strcmp(confirm, "auto")) {
             cross = es_auto_confirm_cross(why, sizeof why);
-            printf("confirm: %s (auto, %s)\n", cross ? "cross" : "circle", why);
-        } else if (!strcmp(confirm, "cross"))  { cross = 1; printf("confirm: cross\n"); }
-        else if (!strcmp(confirm, "circle"))   { cross = 0; printf("confirm: circle\n"); }
+            psp_out("confirm: %s (auto, %s)\n", cross ? "cross" : "circle", why);
+        } else if (!strcmp(confirm, "cross"))  { cross = 1; psp_out("confirm: cross\n"); }
+        else if (!strcmp(confirm, "circle"))   { cross = 0; psp_out("confirm: circle\n"); }
         else {
-            fprintf(stderr, "emotionalsense: unknown --confirm '%s', using auto\n", confirm);
+            psp_log("emotionalsense: unknown --confirm '%s', using auto\n", confirm);
             cross = es_auto_confirm_cross(why, sizeof why);
-            printf("confirm: %s (auto, %s)\n", cross ? "cross" : "circle", why);
+            psp_out("confirm: %s (auto, %s)\n", cross ? "cross" : "circle", why);
         }
         if (cross) djmax_set_confirm_cross(1);
         es_exit_init(cross);
@@ -376,7 +378,7 @@ int main(int argc, char **argv) {
         static char combined[1200];
         if (!(u && !strcmp(u, "0")) && es_update_prepare(data, combined, sizeof combined) == 1) {
             psp_io_set_overlay("disc0:/PSP_GAME/INSDIR/DATA.TPA", combined);
-            printf("data: update 1.02 overlay active\n");
+            psp_out("data: update 1.02 overlay active\n");
         }
     }
     psp_recomp_register();
@@ -415,19 +417,19 @@ int main(int argc, char **argv) {
         if (bs && *bs) {
             if (!strcmp(bs, "blend") || !strcmp(bs, "1")) psp_render_bga_smooth = 1;
             else if (strcmp(bs, "0") && strcmp(bs, "off"))
-                fprintf(stderr, "emotionalsense: unknown EMOTIONALSENSE_BGA_SMOOTH '%s', using 0\n", bs);
+                psp_log("emotionalsense: unknown EMOTIONALSENSE_BGA_SMOOTH '%s', using 0\n", bs);
         }
     }
     if (tex_filter && *tex_filter) {
         if (!strcmp(tex_filter, "nearest"))    psp_render_tex_filter = 0;
         else if (!strcmp(tex_filter, "linear")) psp_render_tex_filter = 1;
         else if (strcmp(tex_filter, "auto"))
-            fprintf(stderr, "emotionalsense: unknown --tex-filter '%s', using auto\n", tex_filter);
+            psp_log("emotionalsense: unknown --tex-filter '%s', using auto\n", tex_filter);
     }
 
     if (renderer && *renderer) {
         if (psp_render_select(renderer) != 0)
-            fprintf(stderr, "emotionalsense: unknown renderer '%s', using %s\n",
+            psp_log("emotionalsense: unknown renderer '%s', using %s\n",
                     renderer, psp_render_current()->name);
     } else {
         psp_render_select("vulkan");
@@ -446,7 +448,7 @@ int main(int argc, char **argv) {
     }
     if ((psp_window_set_icon(es_app_icon_rgba, es_app_icon_w, es_app_icon_h),
          psp_window_start("EmotionalSense-P3", scale)) != 0) {
-        fprintf(stderr, "could not open a window\n");
+        psp_fatal("could not open a window\n");
         return 1;
     }
     if (!internal_scale) {
@@ -456,22 +458,22 @@ int main(int argc, char **argv) {
     }
 
     if (psp_render_current()->init(480, 272) != 0) {
-        fprintf(stderr, "emotionalsense: %s init failed, falling back to software\n",
+        psp_log("emotionalsense: %s init failed, falling back to software\n",
                 psp_render_current()->name);
         psp_render_select("software");
         if (psp_render_scale > 1) {
-            fprintf(stderr, "emotionalsense: the software renderer draws at 1x; "
+            psp_log("emotionalsense: the software renderer draws at 1x; "
                             "internal scale %d ignored\n", psp_render_scale);
             psp_render_scale = 1;
         }
     }
-    printf("EmotionalSense-P3-game %s (psprecomp %s)\n",
+    psp_out("EmotionalSense-P3-game %s (psprecomp %s)\n",
            EMOTIONALSENSE_VERSION_FULL, EMOTIONALSENSE_PSPRECOMP);
-    printf("render: %s, internal scale %d, subpixel lane %s, bga smooth %s\n",
+    psp_out("render: %s, internal scale %d, subpixel lane %s, bga smooth %s\n",
            psp_render_current()->name, psp_render_scale,
            psp_render_subpixel && psp_render_scale > 1 ? "on" : "off",
            psp_render_bga_smooth ? "blend" : "off");
-    printf("emotionalsense: module 0x%08X..0x%08X, entry 0x%08X, gp 0x%08X, %d constructors\n",
+    psp_out("emotionalsense: module 0x%08X..0x%08X, entry 0x%08X, gp 0x%08X, %d constructors\n",
            m.base, m.mem_end, m.entry, m.gp, m.nctors);
 
     psp_module_start(&m);
@@ -570,7 +572,7 @@ int main(int argc, char **argv) {
             uint64_t vb = psp_display_vblanks();
             if (vb / 60 != clock_vb / 60) {
                 double real = host_monotonic_seconds();
-                fprintf(stderr, "clock[%llu]: real %.3fs guest %.3fs audio_blocks %llu intr %llu vbl %llu\n",
+                psp_log("clock[%llu]: real %.3fs guest %.3fs audio_blocks %llu intr %llu vbl %llu\n",
                         (unsigned long long)vb, real - clock_t0,
                         (double)psp_clock_us() / 1e6,
                         (unsigned long long)psp_audio_blocks(),
@@ -590,7 +592,7 @@ int main(int argc, char **argv) {
                 for (uint32_t a = 0; a < 0x180000u; a += 4) { uint32_t v = psp_read32(a); fwrite(&v, 4, 1, f); }
                 fclose(f);
             }
-            fprintf(stderr, "snap: vblank %llu\n", (unsigned long long)snap_vb[snap_next]);
+            psp_log("snap: vblank %llu\n", (unsigned long long)snap_vb[snap_next]);
             snap_next++;
         }
         for (int i = 0; i < poke_n; i++) {
@@ -616,11 +618,11 @@ int main(int argc, char **argv) {
                 if (poll_float[i]) {
                     float f;
                     memcpy(&f, &v, 4);
-                    fprintf(stderr, "poll[%llu]: 0x%08X = %g (0x%08X)\n",
+                    psp_log("poll[%llu]: 0x%08X = %g (0x%08X)\n",
                             (unsigned long long)psp_display_vblanks(), poll_addr[i],
                             (double)f, v);
                 } else {
-                    fprintf(stderr, "poll[%llu]: 0x%08X = 0x%08X t=%.3f\n",
+                    psp_log("poll[%llu]: 0x%08X = 0x%08X t=%.3f\n",
                             (unsigned long long)psp_display_vblanks(), poll_addr[i], v,
                             (double)psp_clock_us() / 1e6);
                 }
@@ -630,7 +632,7 @@ int main(int argc, char **argv) {
         if (max_frames > 0 && psp_display_vblanks() >= (uint64_t)max_frames) {
             if (capture_path) {
                 int rc = psp_display_capture(capture_path);
-                printf("emotionalsense: captured frame %llu (fb=0x%08X, pixels=%llu) -> %s (rc=%d)\n",
+                psp_out("emotionalsense: captured frame %llu (fb=0x%08X, pixels=%llu) -> %s (rc=%d)\n",
                        (unsigned long long)psp_display_vblanks(),
                        psp_display_framebuffer(),
                        (unsigned long long)psp_render_pixels(),
@@ -647,10 +649,10 @@ int main(int argc, char **argv) {
     psprecomp_audio_report();
     /* Phase 0 census: what the game asked the GE for, and which firmware calls
      * it made, at the moment the run ends. */
-    psp_ge_dump_stats(stderr);
-    psp_tex_dump_report(stderr);
-    psp_tex_pack_report(stderr);
-    psp_hle_dump_counts(stderr, 40);
+    psp_ge_dump_stats(psp_log_stream());
+    psp_tex_dump_report(psp_log_stream());
+    psp_tex_pack_report(psp_log_stream());
+    psp_hle_dump_counts(psp_log_stream(), 40);
     {
         const char *vram = getenv("EMOTIONALSENSE_DUMP_VRAM");
         if (vram && *vram) {

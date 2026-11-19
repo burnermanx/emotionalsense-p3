@@ -10,6 +10,7 @@
 #include <psprecomp/cpu.h>
 #include <psprecomp/dispatch.h>
 #include <psprecomp/hle.h>
+#include <psprecomp/log.h>
 #include <psprecomp/render.h>
 
 #include <stdint.h>
@@ -408,6 +409,10 @@ static void log_line(const char *s, size_t n) {
     }
 }
 
+/* Logging off: our own diagnostic lines never reach the terminal, so the tee above does not see
+ * them; psprecomp hands each complete line here to keep the report's "last log lines" filled. */
+static void ring_hook(const char *s, size_t n) { log_line(s, n); }
+
 #ifdef _WIN32
 #  define TEE_READ(fd, b, n) _read(fd, b, (unsigned)(n))
 #  define TEE_WRITE(fd, b, n) _write(fd, b, (unsigned)(n))
@@ -716,6 +721,7 @@ void es_crash_init(const char *data) {
         tee_start(1, 0);
         tee_start(2, 1);
     }
+    psp_log_set_line_hook(ring_hook);
     psp_hle_trace_hook = hle_hook;
     psp_set_miss_handler(guest_miss);
     const char *hs = getenv("EMOTIONALSENSE_HANG_SECONDS");

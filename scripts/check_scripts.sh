@@ -3,6 +3,8 @@
 # the software renderer is 52-72 ms/frame on the music select and would make
 # this test slow and noisy.
 set -eu
+# The game prints nothing by default; every check below reads its log.
+export EMOTIONALSENSE_LOG=1
 root=$(cd "$(dirname "$0")/.." && pwd)
 game=${EMOTIONALSENSE_GAME:-"$root/build/game/EmotionalSense-P3-game"}
 data=${ES_CHECK_DATA:-"$root/work/data"}   # read-only source: linked/copied below, never run against

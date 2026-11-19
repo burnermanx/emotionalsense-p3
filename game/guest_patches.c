@@ -4,6 +4,7 @@
  * stays untouched and can be regenerated freely. */
 
 #include <psprecomp/cpu.h>
+#include "psprecomp/log.h"
 #include <psprecomp/dispatch.h>
 #include <psprecomp/hle.h>
 #include <psprecomp/mem.h>
@@ -91,7 +92,7 @@ void __wrap_psp_func_0007F438(void)
         if (!pack || psp_read32(pack + 4) != type) { i++; continue; }
 
         if (trace)
-            fprintf(stderr, "pack remove: type %u at index %d of %d\n",
+            psp_log("pack remove: type %u at index %d of %d\n",
                     type, i, dq_size(dq));
         for (int w = 0; w < 4; w++) psp_write32(buf + 16 + (uint32_t)w * 4, it[w]);
         psp_cpu.r[PSP_REG_SP] = buf;
@@ -116,7 +117,7 @@ void __wrap_psp_func_00061270(void)
     psp_cpu_state saved = psp_cpu;
     uint32_t fmt = saved.r[PSP_REG_A1];
     if (getenv("EMOTIONALSENSE_TRACE_UMD") && fmt >= 0xB9A00 && fmt < 0xB9D00)
-        fprintf(stderr, "umd: check vblank=%llu fmt=%x a2=%d a3=%d a4=%d a5=%d\n",
+        psp_log("umd: check vblank=%llu fmt=%x a2=%d a3=%d a4=%d a5=%d\n",
                 (unsigned long long)psp_display_vblanks(), fmt,
                 (int)saved.r[PSP_REG_A2], (int)saved.r[PSP_REG_A3],
                 (int)saved.r[PSP_REG_T0], (int)saved.r[PSP_REG_T1]);
@@ -171,7 +172,7 @@ void __wrap_psp_func_00077124(void)
     uint32_t obj = psp_cpu.r[PSP_REG_A0];
     if (SCENE_WORD == SCENE_PLAY) g_song_player = obj;
     if (getenv("EMOTIONALSENSE_TRACE_PLAYER"))
-        fprintf(stderr, "player: start obj=%08X vb=%llu scene=%u ra=%08X\n",
+        psp_log("player: start obj=%08X vb=%llu scene=%u ra=%08X\n",
                 obj, (unsigned long long)psp_display_vblanks(),
                 SCENE_WORD, psp_cpu.r[PSP_REG_RA]);
     __real_psp_func_00077124();
@@ -180,7 +181,7 @@ void __wrap_psp_func_00077124(void)
 void __wrap_psp_func_0007718C(void)
 {
     if (getenv("EMOTIONALSENSE_TRACE_PLAYER"))
-        fprintf(stderr, "player: stop  obj=%08X vb=%llu scene=%u ra=%08X\n",
+        psp_log("player: stop  obj=%08X vb=%llu scene=%u ra=%08X\n",
                 psp_cpu.r[PSP_REG_A0], (unsigned long long)psp_display_vblanks(),
                 SCENE_WORD, psp_cpu.r[PSP_REG_RA]);
     __real_psp_func_0007718C();
