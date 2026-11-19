@@ -50,9 +50,50 @@ static int g_enabled = 1;
 void es_exit_set_confirm_cross(int cross) { g_confirm_cross = cross != 0; }
 void es_exit_enable(int on) { g_enabled = on; }
 
+#ifndef _WIN32
+/* Steam Game Mode (gamescope) keeps LANG at the system default; the language the
+ * user chose is the Steam client's, in ~/.steam/registry.vdf ("language"). Same
+ * order as launcher/es_i18n.py. Returns a language index or -1. */
+static int steam_lang(void) {
+    if (!getenv("SteamDeck") && !getenv("SteamGamepadUI") && !getenv("SteamOS") &&
+        !getenv("GAMESCOPE_WAYLAND_DISPLAY") && !getenv("SteamAppId") && !getenv("SteamGameId"))
+        return -1;
+    const char *h = getenv("HOME");
+    if (!h || !*h) return -1;
+    static const char *const rel[] = { "/.steam/registry.vdf", "/.local/share/Steam/registry.vdf" };
+    for (int r = 0; r < 2; r++) {
+        char path[1024];
+        snprintf(path, sizeof path, "%s%s", h, rel[r]);
+        FILE *f = fopen(path, "r");
+        if (!f) continue;
+        char line[512];
+        int res = -1;
+        while (fgets(line, sizeof line, f)) {
+            char *k = strstr(line, "\"language\"");
+            if (!k) continue;
+            char *q = strchr(k + 10, '"');
+            if (!q) continue;
+            q++;
+            if (!strncmp(q, "brazilian", 9) || !strncmp(q, "portuguese", 10)) res = 1;
+            else if (!strncmp(q, "spanish", 7) || !strncmp(q, "latam", 5)) res = 2;
+            else if (!strncmp(q, "japanese", 8)) res = 3;
+            else if (!strncmp(q, "koreana", 7)) res = 4;
+            else if (!strncmp(q, "english", 7)) res = 0;
+            break;
+        }
+        fclose(f);
+        if (res >= 0) return res;
+    }
+    return -1;
+}
+#endif
+
 static int pick_lang(void) {
     const char *v = getenv("EMOTIONALSENSE_LANG");
     if (!v || !*v || !strcmp(v, "auto")) {
+#ifndef _WIN32
+        { int sl = steam_lang(); if (sl >= 0) return sl; }
+#endif
         static const char *const names[] = { "LC_ALL", "LC_MESSAGES", "LANG" };
         v = NULL;
         for (int i = 0; i < 3 && !v; i++) {

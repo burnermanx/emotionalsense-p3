@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import locale
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Mapping, Optional
@@ -82,7 +83,57 @@ def _windows() -> Optional[str]:
         return None
 
 
-def detect(env: Optional[Mapping[str, str]] = None, platform: Optional[str] = None) -> str:
+# Language names of the Steam client (registry.vdf "language") -> ours.
+_STEAM = {"brazilian": "pt-BR", "portuguese": "pt-BR", "english": "en", "spanish": "es",
+          "latam": "es", "japanese": "ja", "koreana": "ko"}
+
+
+def steam_session(env: Mapping[str, str]) -> bool:
+    """Steam Game Mode (gamescope) or a game started by the Steam client."""
+    if any(env.get(k) for k in ("SteamDeck", "SteamGamepadUI", "SteamOS", "GAMESCOPE_WAYLAND_DISPLAY",
+                                "SteamAppId", "SteamGameId", "STEAM_COMPAT_DATA_PATH")):
+        return True
+    return "gamescope" in env.get("XDG_CURRENT_DESKTOP", "").lower().split(":") or \
+        env.get("XDG_SESSION_DESKTOP", "").lower() == "gamescope"
+
+
+def steam_language(home: Optional[Path] = None) -> Optional[str]:
+    """Language of the Steam client, read-only, from registry.vdf
+    (HKCU/Software/Valve/Steam/language). None when absent, unreadable or unsupported."""
+    home = home or Path.home()
+    for rel in (".steam/registry.vdf", ".local/share/Steam/registry.vdf"):
+        try:
+            text = (home / rel).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        m = re.search(r'"language"\s+"([^"]*)"', text, re.I)
+        if m:
+            n = _STEAM.get(m.group(1).strip().lower())
+            if n:
+                return n
+    return None
+
+
+def plasma_language(home: Optional[Path] = None) -> Optional[str]:
+    """Desktop-mode language from ~/.config/plasma-localerc ([Formats] LANG, [Translations] LANGUAGE)."""
+    home = home or Path.home()
+    try:
+        text = (home / ".config/plasma-localerc").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    vals = {}
+    for line in text.splitlines():
+        k, _, v = line.partition("=")
+        if _:
+            vals.setdefault(k.strip(), v.strip())
+    for entry in vals.get("LANGUAGE", "").split(":"):
+        if normalize(entry):
+            return normalize(entry)
+    return normalize(vals.get("LANG"))
+
+
+def detect(env: Optional[Mapping[str, str]] = None, platform: Optional[str] = None,
+           home: Optional[Path] = None) -> str:
     real = env is None
     env = os.environ if env is None else env
     platform = platform or sys.platform
@@ -92,7 +143,9 @@ def detect(env: Optional[Mapping[str, str]] = None, platform: Optional[str] = No
         if not code:                                    # Wine without the API, tests
             code = _posix(env)
     else:
-        code = _posix(env)
+        if steam_session(env):                          # Game Mode: LANG is the system default
+            code = steam_language(home) or plasma_language(home)
+        code = code or _posix(env)
         if not code and real:
             try:
                 code = normalize(locale.getlocale()[0])

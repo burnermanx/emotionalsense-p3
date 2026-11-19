@@ -74,5 +74,61 @@ class Lookup(unittest.TestCase):
         es_i18n.set_language("auto")
 
 
+
+
+class SteamGameMode(unittest.TestCase):
+    """Game Mode (gamescope) keeps LANG at the system default; the Steam client's language wins.
+    Synthetic files in temp dirs only; the real Steam folders are never read."""
+    VDF = ('"Registry"\n{\n\t"HKCU"\n\t{\n\t\t"Software"\n\t\t{\n\t\t\t"Valve"\n\t\t\t{\n\t\t\t\t"Steam"\n\t\t\t\t{\n'
+           '\t\t\t\t\t"language"\t\t"%s"\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n}\n')
+    GAME = {"LANG": "en_US.UTF-8", "SteamDeck": "1", "XDG_CURRENT_DESKTOP": "gamescope"}
+
+    def home(self, lang=None, raw=None, plasma=None):
+        import tempfile
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        h = Path(td.name)
+        if lang is not None or raw is not None:
+            (h / ".steam").mkdir()
+            (h / ".steam/registry.vdf").write_text(raw if raw is not None else self.VDF % lang)
+        if plasma:
+            (h / ".config").mkdir()
+            (h / ".config/plasma-localerc").write_text(plasma)
+        return h
+
+    def test_each_steam_language(self):
+        for name, code in (("brazilian", "pt-BR"), ("portuguese", "pt-BR"), ("english", "en"),
+                           ("spanish", "es"), ("latam", "es"), ("japanese", "ja"), ("koreana", "ko")):
+            self.assertEqual(es_i18n.detect(self.GAME, "linux", self.home(name)), code, name)
+
+    def test_session_detection(self):
+        for env in ({"SteamDeck": "1"}, {"SteamGamepadUI": "1"}, {"SteamOS": "1"},
+                    {"GAMESCOPE_WAYLAND_DISPLAY": "gamescope-0"}, {"XDG_CURRENT_DESKTOP": "gamescope"},
+                    {"SteamAppId": "1"}):
+            self.assertTrue(es_i18n.steam_session(env), env)
+        self.assertFalse(es_i18n.steam_session({"XDG_CURRENT_DESKTOP": "KDE", "LANG": "pt_BR.UTF-8"}))
+
+    def test_desktop_mode_ignores_steam_file(self):
+        env = {"LANG": "pt_BR.UTF-8", "XDG_CURRENT_DESKTOP": "KDE"}
+        self.assertEqual(es_i18n.detect(env, "linux", self.home("japanese")), "pt-BR")
+
+    def test_manual_choice_wins(self):
+        es_i18n.set_language("ko")                      # a saved choice never reaches detect()
+        self.assertEqual(es_i18n.language(), "ko")
+        es_i18n.set_language("en")
+
+    def test_fallbacks(self):
+        env = dict(self.GAME, LANG="es_ES.UTF-8")
+        self.assertEqual(es_i18n.detect(env, "linux", self.home()), "es")                    # no file
+        self.assertEqual(es_i18n.detect(env, "linux", self.home(raw="\x00{{ garbage")), "es")  # corrupt
+        self.assertEqual(es_i18n.detect(env, "linux", self.home("german")), "es")            # unsupported
+        self.assertEqual(es_i18n.detect(env, "linux", self.home(plasma="[Formats]\nLANG=ja_JP.UTF-8\n")), "ja")
+        self.assertEqual(es_i18n.detect(self.GAME, "linux", self.home()), "en")
+
+    def test_steam_beats_plasma(self):
+        h = self.home("brazilian", plasma="[Translations]\nLANGUAGE=ko\n")
+        self.assertEqual(es_i18n.detect(self.GAME, "linux", h), "pt-BR")
+
+
 if __name__ == "__main__":
     unittest.main()
