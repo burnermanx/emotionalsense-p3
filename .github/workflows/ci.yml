@@ -19,7 +19,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            ninja-build libsdl2-dev libvulkan-dev
+            ninja-build libsdl2-dev libvulkan-dev \
+            python3-pil python3-pil.imagetk python3-tk
       - name: Configure
         run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
       - name: Build
