@@ -36,7 +36,8 @@ def cmake_sources(text: str, start_pat: str) -> list:
 def version() -> str:
     m = re.search(r"project\(emotionalsense\s+VERSION\s+([0-9.]+)",
                   (ROOT / "CMakeLists.txt").read_text())
-    return m.group(1) if m else "0.0.0"
+    s = re.search(r'set\(EMOTIONALSENSE_VERSION_SUFFIX\s+"([^"]*)"\)', (ROOT / "CMakeLists.txt").read_text())
+    return (m.group(1) if m else "0.0.0") + (s.group(1) if s else "")
 
 
 def git(*args, cwd=ROOT) -> str:
@@ -45,6 +46,20 @@ def git(*args, cwd=ROOT) -> str:
                               check=True).stdout.strip()
     except (OSError, subprocess.CalledProcessError):
         return ""
+
+
+def describe_full() -> str:
+    """Same rule as cmake/version.cmake: git describe, unless the tree's version is ahead of the
+    nearest tag (0.2.0-dev after v0.1.0), then <version>-<commits>-g<hash>[-dirty]."""
+    base = version().split("-")[0]
+    d = git("describe", "--tags", "--dirty").lstrip("v")
+    if d and d.startswith(base):
+        return d
+    head, count = git("rev-parse", "--short", "HEAD"), git("rev-list", "--count", "HEAD")
+    if not head:
+        return version()
+    dirty = "-dirty" if git("status", "--porcelain", "--untracked-files=no") else ""
+    return f"{version()}-{count}-g{head}{dirty}"
 
 
 def build_manifest() -> dict:
@@ -74,7 +89,7 @@ def build_manifest() -> dict:
         "version": version(),
         # What --version and the window title show; the same strings
         # cmake/version.cmake would put in version.h.
-        "version_full": (git("describe", "--tags", "--dirty") or version()).lstrip("v"),
+        "version_full": describe_full(),
         "psprecomp_rev": git("rev-parse", "--short", "HEAD", cwd=PSP) or "unknown",
         "runtime_sources": runtime,
         "game_sources": game,

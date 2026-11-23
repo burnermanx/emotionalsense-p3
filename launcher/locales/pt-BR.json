@@ -65,7 +65,6 @@
  "err.chd_corrupt": "Este CHD está danificado ou incompleto e não pôde ser lido ({what}). Copie o arquivo de novo ou gere-o outra vez a partir da ISO com o chdman.",
  "err.cso_corrupt": "Este CSO está danificado ou incompleto e não pôde ser lido ({what}). Copie o arquivo de novo ou gere-o outra vez a partir da ISO.",
  "err.cso_invalid": "Este arquivo não é um CSO que o launcher consiga ler ({what}).",
- "err.zso_unsupported": "Esta é uma imagem ZSO (compactada com LZ4), que este launcher não consegue ler. Converta para CSO ou ISO (por exemplo com maxcso --decompress) ou use um CHD.",
  "err.chd_unsupported": "Este CHD não é uma imagem de disco de PSP que o launcher consiga ler ({what}). Use um CHD feito pelo chdman createdvd ou createcd a partir da ISO do jogo.",
  "err.wrong_region": "Esperado {expected}, encontrado {title} [{id}].",
  "err.decrypt_failed": "Não foi possível descriptografar o executável do jogo.",

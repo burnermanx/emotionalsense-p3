@@ -7,7 +7,11 @@
 # produces it from your own decrypted EBOOT into ${EMOTIONALSENSE_GEN_DIR}.
 
 cmake_minimum_required(VERSION 3.16)
-project(emotionalsense VERSION 0.1.0 LANGUAGES C)
+project(emotionalsense VERSION 0.2.0 LANGUAGES C)
+
+# A development tree is "<VERSION>-dev"; scripts/release.sh removes this line when it
+# prepares a release (project(VERSION) stays purely numeric for the release workflow).
+set(EMOTIONALSENSE_VERSION_SUFFIX "-dev")
 
 # The version is written in project() above and nowhere else. Everything else
 # reads what cmake/version.cmake produces: --version, the first log line, the
@@ -19,6 +23,7 @@ set(_version_cmd ${CMAKE_COMMAND}
     "-DSRC=${CMAKE_CURRENT_SOURCE_DIR}"
     "-DOUT=${EMOTIONALSENSE_VERSION_H}"
     "-DVERSION=${PROJECT_VERSION}"
+    "-DSUFFIX=${EMOTIONALSENSE_VERSION_SUFFIX}"
     -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.cmake")
 execute_process(COMMAND ${_version_cmd})
 add_custom_target(version_header ALL COMMAND ${_version_cmd}

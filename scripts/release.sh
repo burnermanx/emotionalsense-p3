@@ -23,12 +23,15 @@ if [ -n "$(git status --porcelain)" ]; then
 fi
 
 current=$(sed -n 's/^project(emotionalsense VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
-if [ "$current" = "$version" ]; then
+if [ "$current" = "$version" ] && ! grep -q '^set(EMOTIONALSENSE_VERSION_SUFFIX' CMakeLists.txt; then
     echo "CMakeLists.txt already says $version" >&2
     exit 1
 fi
 
 sed -i "s/^project(emotionalsense VERSION [0-9.]*/project(emotionalsense VERSION $version/" CMakeLists.txt
+# a release is not a "-dev" tree: drop the suffix (and its comment) the development tree carries
+sed -i '/^# A development tree is "/,/^set(EMOTIONALSENSE_VERSION_SUFFIX/d' CMakeLists.txt
+sed -i 's/^\(version = \|VERSION = \)"[^"]*"/\1"'"$version"'"/' launcher/es_version.py
 
 today=$(date -u +%Y-%m-%d)
 python3 - "$version" "$today" <<'PY'

@@ -18,7 +18,9 @@ class Version(unittest.TestCase):
 
     def test_matches_cmake(self):
         cm = (Path(__file__).resolve().parents[2] / "CMakeLists.txt").read_text()
-        self.assertEqual(re.search(r"project\(emotionalsense\s+VERSION\s+([0-9.]+)", cm)[1], es_version.VERSION)
+        suffix = re.search(r'set\(EMOTIONALSENSE_VERSION_SUFFIX\s+"([^"]*)"\)', cm)
+        self.assertEqual(re.search(r"project\(emotionalsense\s+VERSION\s+([0-9.]+)", cm)[1]
+                         + (suffix[1] if suffix else ""), es_version.VERSION)
 
     def test_fallback_when_no_kit(self):
         self.assertEqual(self.ui()._version(), es_version.VERSION)

@@ -3,16 +3,23 @@
 # tag never leaves a stale string in the binary.
 #
 #   cmake -DSRC=<source dir> -DOUT=<version.h> -DVERSION=<project version>
-#         -P cmake/version.cmake
+#         [-DSUFFIX=-dev] -P cmake/version.cmake
 
+set(VERSION "${VERSION}${SUFFIX}")
 set(full "${VERSION}")
+set(base "${VERSION}")
+if(SUFFIX)
+    string(REPLACE "${SUFFIX}" "" base "${VERSION}")
+endif()
 find_program(GIT_EXECUTABLE git)
 if(GIT_EXECUTABLE AND EXISTS "${SRC}/.git")
     execute_process(COMMAND "${GIT_EXECUTABLE}" describe --tags --dirty
         WORKING_DIRECTORY "${SRC}"
         OUTPUT_VARIABLE describe OUTPUT_STRIP_TRAILING_WHITESPACE
         ERROR_QUIET RESULT_VARIABLE rc)
-    if(rc EQUAL 0 AND describe)
+    # A development tree whose version is ahead of the last tag (0.2.0-dev after v0.1.0) is
+    # described from its own version, not from the old tag.
+    if(rc EQUAL 0 AND describe AND describe MATCHES "^v?${base}")
         string(REGEX REPLACE "^v" "" describe "${describe}")
         set(full "${describe}")
     else()

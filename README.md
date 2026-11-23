@@ -156,10 +156,10 @@ for 20 s) writes a report too, and the game keeps running.
   Data Install is not needed; nothing is wrong.
 - Open an issue with the crash report for anything else.
 
-## CSO images and extracted folders
+## CSO / ZSO images and extracted folders
 
-The launcher also reads **CSO** (CISO v1/v2) images in place; ZSO (LZ4) is not supported (convert it
-with `maxcso --decompress` or use a CHD). If the disc is already extracted, a game folder (the one
+The launcher also reads **CSO** (CISO v1/v2) and **ZSO** (the LZ4 variant, `maxcso --format=zso`) images in
+place, with no temporary ISO. If the disc is already extracted, a game folder (the one
 that holds `PSP_GAME`) next to the program is offered as the source and copied (never moved), and a
 data folder that already holds the extracted disc is reused without asking for the image again.
 

@@ -65,7 +65,6 @@
  "err.chd_corrupt": "This CHD is damaged or incomplete and could not be read ({what}). Copy it again, or create it again from the ISO with chdman.",
  "err.cso_corrupt": "This CSO is damaged or incomplete and could not be read ({what}). Copy it again, or create it again from the ISO.",
  "err.cso_invalid": "This file is not a CSO the launcher can read ({what}).",
- "err.zso_unsupported": "This is a ZSO (LZ4-compressed) image, which this launcher cannot read. Convert it to CSO or ISO (for example with maxcso --decompress), or use a CHD.",
  "err.chd_unsupported": "This CHD is not a PSP disc image the launcher can read ({what}). Use a CHD that chdman createdvd or createcd made from the game's ISO.",
  "err.wrong_region": "Expected {expected}, found {title} [{id}].",
  "err.decrypt_failed": "Could not decrypt the game executable.",

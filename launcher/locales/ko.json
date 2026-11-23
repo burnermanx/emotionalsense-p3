@@ -65,7 +65,6 @@
  "err.chd_corrupt": "이 CHD는 손상되었거나 불완전하여 읽을 수 없습니다({what}). 파일을 다시 복사하거나 ISO에서 chdman으로 다시 만드세요.",
  "err.cso_corrupt": "이 CSO는 손상되었거나 불완전하여 읽을 수 없습니다({what}). 파일을 다시 복사하거나 ISO에서 다시 만드세요.",
  "err.cso_invalid": "이 파일은 런처가 읽을 수 있는 CSO가 아닙니다({what}).",
- "err.zso_unsupported": "이것은 ZSO(LZ4 압축) 이미지로, 이 런처는 읽을 수 없습니다. CSO 또는 ISO로 변환(예: maxcso --decompress)하거나 CHD를 사용하세요.",
  "err.chd_unsupported": "이 CHD는 런처가 읽을 수 있는 PSP 디스크 이미지가 아닙니다({what}). 게임의 ISO에서 chdman createdvd 또는 createcd로 만든 CHD를 사용하세요.",
  "err.wrong_region": "{expected}이(가) 필요하지만 {title} [{id}]입니다.",
  "err.decrypt_failed": "게임 실행 파일을 복호화하지 못했습니다.",

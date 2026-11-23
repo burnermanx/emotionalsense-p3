@@ -65,7 +65,6 @@
  "err.chd_corrupt": "このCHDは破損しているか不完全で、読み込めませんでした（{what}）。ファイルをコピーし直すか、ISOからchdmanで作り直してください。",
  "err.cso_corrupt": "このCSOは破損しているか不完全で、読み込めませんでした（{what}）。ファイルをコピーし直すか、ISOから作り直してください。",
  "err.cso_invalid": "このファイルはランチャーが読めるCSOではありません（{what}）。",
- "err.zso_unsupported": "これはZSO（LZ4圧縮）イメージで、このランチャーでは読めません。CSOまたはISOに変換する（例: maxcso --decompress）か、CHDを使ってください。",
  "err.chd_unsupported": "このCHDはランチャーが読めるPSPのディスクイメージではありません（{what}）。ゲームのISOからchdman createdvdまたはcreatecdで作ったCHDを使ってください。",
  "err.wrong_region": "{expected} が必要ですが、{title} [{id}] でした。",
  "err.decrypt_failed": "ゲームの実行ファイルを復号できませんでした。",

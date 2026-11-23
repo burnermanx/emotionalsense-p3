@@ -12,45 +12,14 @@ build the rest from your own disc.
 
 ### Added
 
-- **CSO images** (CISO v1/v2, as made by PPSSPP/maxcso/ciso) are read by sector like CHD, with no
-  temporary ISO (`launcher/es_cso.py`; byte-for-byte test against the ISO). ZSO (LZ4) is recognised
-  and refused with a clear message in five languages.
-- **Already extracted data is reused**: a data folder that holds the extracted disc is not asked
-  for an image again (a new launcher version only redoes the steps after the extraction), and an
-  extracted game folder (`PSP_GAME` of ULKS46236) next to the program is offered as the source: it is
-  checked and copied, never moved or changed. Incomplete or wrong folders are refused with the reason.
+- **ZSO images** (`ZISO`, the LZ4 variant of CSO: `maxcso --format=zso`) are read in place like CSO,
+  with a pure Python LZ4 block decoder (no new dependency); the "ZSO not supported" message is gone.
+  Tested byte for byte against the ISO, with blocks from the reference `lz4` compressor.
 
-### Fixed
+### Changed
 
-- The game is recognised as soon as the file dialog returns (the screen was only redrawn after the
-  next key or pad press).
-- **Vulkan start-up is now visible and no longer exposed to Steam's layers/runtime** (Steam Deck):
-  the game writes `<data>/logs/renderer.log` on every start (which renderer, the relevant
-  environment, each Vulkan step with its `VkResult`); when Vulkan does not start the launcher
-  shows a dialog (five languages) with the report and an issue link; `--renderer vulkan` is strict
-  (exit code 3, no silent software fallback). The offscreen Vulkan instance turns the implicit
-  layers off (a failing driver made the Gamescope WSI layer abort the process: reproduced with a
-  failing test driver), and the game no longer inherits Steam's runtime folders in
-  `LD_LIBRARY_PATH` or its overlay in `LD_PRELOAD`.
-- **Launcher on Windows (Proton): the menu scrolled by itself.** A gamepad input that is already
-  "pressed" when the controller is first seen (a second, phantom device, a raw HID node) is now
-  ignored until it has been released once, directions are tracked per device with a hysteresis
-  on the stick, the controller list is no longer closed and reopened every second when a raw
-  joystick that is not a game controller is present, and the pad is mute while a system dialog
-  (file picker, crash dialog) is open and until what is held is released afterwards.
-- **Launcher: every screen is as fluid as the options screen.** The panel gradient was drawn
-  pixel by pixel in Python on every frame (60 to 120 ms for the setup, play and loading screens)
-  and is now built per row and cached; a screen change shows its first frame inside one 60 Hz
-  period; transitions are paced at 60 Hz (they ran at about 30); the loading screen follows the
-  worker thread at 8 ms.
-- **Linux: the guest's time base was the system clock (`CLOCK_REALTIME`).** Guest time, frame
-  pacing and the audio grid now use `CLOCK_MONOTONIC`, like the performance counter on Windows,
-  so a time-sync step or a resume cannot move the game's timeline against the music.
-
-### Added
-
-- `--sync-log` / `EMOTIONALSENSE_SYNC_LOG=1`: write the clock, vblank and audio traces to
-  `<data>/logs/sync-<time>.log` for a timing report (see `docs/diagnostics.md`).
+- Development version is now `0.2.0-dev` (`--version`, the launcher, the kit manifest);
+  `scripts/release.sh` drops the suffix when a release is prepared.
 
 ## [0.1.0] - 2026-11-19
 
@@ -99,6 +68,15 @@ ISO, on Linux and Windows, x86-64 and arm64.
   texture packs; unlock of every song, item and the 4.2T / 6.2T modes (`docs/unlock-table.md`).
 - Diagnostics: scene-relative input scripts, polling and poking through pointer paths,
   traces for clock, audio, MPEG, UMD (`docs/diagnostics.md`).
+- **CSO images** (CISO v1/v2, as made by PPSSPP/maxcso/ciso) are read by sector like CHD, with no
+  temporary ISO (`launcher/es_cso.py`; byte-for-byte test against the ISO). ZSO (LZ4) is recognised
+  and refused with a clear message in five languages.
+- **Already extracted data is reused**: a data folder that holds the extracted disc is not asked
+  for an image again (a new launcher version only redoes the steps after the extraction), and an
+  extracted game folder (`PSP_GAME` of ULKS46236) next to the program is offered as the source: it is
+  checked and copied, never moved or changed. Incomplete or wrong folders are refused with the reason.
+- `--sync-log` / `EMOTIONALSENSE_SYNC_LOG=1`: write the clock, vblank and audio traces to
+  `<data>/logs/sync-<time>.log` for a timing report (see `docs/diagnostics.md`).
 
 ### Changed
 
@@ -126,6 +104,30 @@ ISO, on Linux and Windows, x86-64 and arm64.
 - The raw `umd0:` sector device the disc check reads is emulated, so the anti-copy check
   passes without touching the ISO.
 - The game never leaves an explicit `--data` folder for another one.
+- The game is recognised as soon as the file dialog returns (the screen was only redrawn after the
+  next key or pad press).
+- **Vulkan start-up is now visible and no longer exposed to Steam's layers/runtime** (Steam Deck):
+  the game writes `<data>/logs/renderer.log` on every start (which renderer, the relevant
+  environment, each Vulkan step with its `VkResult`); when Vulkan does not start the launcher
+  shows a dialog (five languages) with the report and an issue link; `--renderer vulkan` is strict
+  (exit code 3, no silent software fallback). The offscreen Vulkan instance turns the implicit
+  layers off (a failing driver made the Gamescope WSI layer abort the process: reproduced with a
+  failing test driver), and the game no longer inherits Steam's runtime folders in
+  `LD_LIBRARY_PATH` or its overlay in `LD_PRELOAD`.
+- **Launcher on Windows (Proton): the menu scrolled by itself.** A gamepad input that is already
+  "pressed" when the controller is first seen (a second, phantom device, a raw HID node) is now
+  ignored until it has been released once, directions are tracked per device with a hysteresis
+  on the stick, the controller list is no longer closed and reopened every second when a raw
+  joystick that is not a game controller is present, and the pad is mute while a system dialog
+  (file picker, crash dialog) is open and until what is held is released afterwards.
+- **Launcher: every screen is as fluid as the options screen.** The panel gradient was drawn
+  pixel by pixel in Python on every frame (60 to 120 ms for the setup, play and loading screens)
+  and is now built per row and cached; a screen change shows its first frame inside one 60 Hz
+  period; transitions are paced at 60 Hz (they ran at about 30); the loading screen follows the
+  worker thread at 8 ms.
+- **Linux: the guest's time base was the system clock (`CLOCK_REALTIME`).** Guest time, frame
+  pacing and the audio grid now use `CLOCK_MONOTONIC`, like the performance counter on Windows,
+  so a time-sync step or a resume cannot move the game's timeline against the music.
 
 ### Save compatibility
 
