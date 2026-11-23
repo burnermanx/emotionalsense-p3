@@ -117,6 +117,8 @@ Everything is in the launcher's Options screen and saved automatically.
 | Full screen rate | Borderless (default, desktop rate) or an exclusive 60 / 120 Hz mode for F11 |
 | Fever mode | **Respect** (default): the Fever starts by itself when the gauge fills and the lane speed you chose is kept. **Original**: the PSP game untouched ([`docs/fever.md`](docs/fever.md)) |
 | Scoring system | **Respect** (default): your judgment percentage out of 1,000,000 (87.8 % reads 878,000; 100 % reads exactly 1,000,000), on the result screen and in the song list. **Original**: the PSP score. Display only: the game keeps writing its own record in both modes ([`docs/score.md`](docs/score.md)) |
+| Speed system | **Respect** (default): Auto Velocity. R and L change the speed in steps of 0.1 (1.0x to 7.0x) and the number is the apparent speed: 2.0 scrolls the same on a 100 and a 200 BPM song (a tempo change inside a song still speeds the notes up or down as in the game). A label `AV 2.3` replaces the game's speed sprite. **Original**: the PSP speeds, 0.5x to 7.0x in steps of 0.5 ([`docs/speed.md`](docs/speed.md)) |
+| MISSION | Fever, scoring and speed are always **Original** in MISSION mode (the missions are balanced for the PSP rules), whatever the options say |
 | Background video smoothing | blends the 30 fps background video (off by default) |
 | Data update 1.02 | installs or removes the optional update |
 | Renderer | Automatic, Vulkan or software |

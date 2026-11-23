@@ -45,6 +45,14 @@ void djmax_hle_register(void);    /* in hle_djmax.c */
 void djmax_set_confirm_cross(int cross);
 void es_exit_init(int confirm_cross);   /* exit_dialog.c */
 extern int djmax_fever_respect;   /* guest_patches.c */
+extern int djmax_speed_respect;   /* speed.c */
+int djmax_mission_active(void);   /* guest_patches.c */
+void djmax_mode_tick(void);       /* guest_patches.c */
+void djmax_speed_tick(void);      /* speed.c */
+void djmax_speed_flush(void);
+void djmax_speed_set_dir(const char *dir);
+int es_speed_overlay(uint32_t *px, int w, int h);
+int es_exit_overlay(uint32_t *px, int w, int h);
 extern int djmax_score_respect;   /* score.c */
 void djmax_score_sample(uint32_t sum, uint32_t count);
 void djmax_score_set_dir(const char *dir);
@@ -228,10 +236,17 @@ static uint32_t poke_resolve(const char *e) {
  * lane-speed side lives in guest_patches.c. Only while the gameplay scene is
  * current and every link of the path is a RAM pointer. */
 static void fever_respect_tick(void) {
-    if (!djmax_fever_respect || psp_scene_now() != 3) return;
+    if (!djmax_fever_respect || psp_scene_now() != 3 || djmax_mission_active()) return;   /* MISSION: Original */
     uint32_t a = poke_resolve("*0xC8B30+0*+0xC*+0x564*");
     if (a >= 0x08000000u && a < 0x0A000000u && psp_mem_ptr(a + 0x14C, 4))
         psp_write8(a + 0x148, 1);
+}
+
+/* The window has one overlay slot: the exit dialog (dims the frame) over the speed label. */
+static int es_overlay_all(uint32_t *px, int w, int h) {
+    int a = es_speed_overlay(px, w, h);
+    int b = es_exit_overlay(px, w, h);
+    return a | b;
 }
 
 /* Respect scoring: remember the judge's weight sum and count while a song is
@@ -351,6 +366,8 @@ int main(int argc, char **argv) {
     const char *fever = getenv("EMOTIONALSENSE_FEVER");
     /* EMOTIONALSENSE_SCORE / --score: respect (default) or original. */
     const char *score_mode = getenv("EMOTIONALSENSE_SCORE");
+    /* EMOTIONALSENSE_SPEED / --speed: respect (default, Auto Velocity in steps of 0.1) or original. */
+    const char *speed_mode = getenv("EMOTIONALSENSE_SPEED");
     const char *confirm = getenv("EMOTIONALSENSE_CONFIRM");   /* NULL/""/"auto" -> follow the system language */
     setvbuf(stdout, NULL, _IOLBF, 0);    /* keep log order intact if the game traps */
     default_data_dir(data, sizeof data);
@@ -371,6 +388,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--fullscreen") && i + 1 < argc) fullscreen = argv[++i];
         else if (!strcmp(argv[i], "--fever") && i + 1 < argc)    fever = argv[++i];
         else if (!strcmp(argv[i], "--score") && i + 1 < argc)    score_mode = argv[++i];
+        else if (!strcmp(argv[i], "--speed") && i + 1 < argc)    speed_mode = argv[++i];
         else if (!strcmp(argv[i], "--verbose") || !strcmp(argv[i], "-v")) psp_log_enable(1);
         else if (!strcmp(argv[i], "--version") || !strcmp(argv[i], "-V")) {
             printf("EmotionalSense-P3-game %s (psprecomp %s)\n",
@@ -378,7 +396,7 @@ int main(int argc, char **argv) {
             return 0;
         }
         else if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) {
-            printf("usage: %s [--data <dir>] [--scale N] [--internal-scale N|auto] [--tex-filter nearest|linear|auto] [--fps N] [--frames N] [--capture file.ppm] [--renderer vulkan|software|null (a named renderer never falls back)] [--confirm circle|cross|auto] [--fullscreen 1|0|auto] [--fever respect|original] [--score respect|original] [--verbose] [--version]\n\nNothing is printed by default except fatal errors; --verbose (or EMOTIONALSENSE_LOG=1, or any EMOTIONALSENSE_TRACE_* variable) prints the diagnostic log\n", argv[0]);
+            printf("usage: %s [--data <dir>] [--scale N] [--internal-scale N|auto] [--tex-filter nearest|linear|auto] [--fps N] [--frames N] [--capture file.ppm] [--renderer vulkan|software|null (a named renderer never falls back)] [--confirm circle|cross|auto] [--fullscreen 1|0|auto] [--fever respect|original] [--score respect|original] [--speed respect|original] [--verbose] [--version]\n\nNothing is printed by default except fatal errors; --verbose (or EMOTIONALSENSE_LOG=1, or any EMOTIONALSENSE_TRACE_* variable) prints the diagnostic log\n", argv[0]);
             return 0;
         }
     }
@@ -396,6 +414,12 @@ int main(int argc, char **argv) {
         if (!strcmp(score_mode, "original")) djmax_score_respect = 0;
         else if (strcmp(score_mode, "respect"))
             psp_log("emotionalsense: unknown score mode '%s', using respect\n", score_mode);
+    }
+    djmax_speed_respect = 1;                      /* the default */
+    if (speed_mode && *speed_mode) {
+        if (!strcmp(speed_mode, "original")) djmax_speed_respect = 0;
+        else if (strcmp(speed_mode, "respect"))
+            psp_log("emotionalsense: unknown speed mode '%s', using respect\n", speed_mode);
     }
     snprintf(elf, sizeof elf, "%s/module/eboot.elf", data);
     if (!is_file(elf) && !data_explicit) {
@@ -432,7 +456,9 @@ int main(int argc, char **argv) {
     }
     psp_out("fever: %s\n", djmax_fever_respect ? "respect" : "original");
     psp_out("score: %s\n", djmax_score_respect ? "respect" : "original");
+    psp_out("speed: %s\n", djmax_speed_respect ? "respect" : "original");
     djmax_score_set_dir(data);
+    djmax_speed_set_dir(data);
     psp_out("data: %s\n", data);
     snprintf(ms, sizeof ms, "%s/ms", data);
     host_mkdir(ms);
@@ -459,6 +485,7 @@ int main(int argc, char **argv) {
         }
         if (cross) djmax_set_confirm_cross(1);
         es_exit_init(cross);
+        psp_window_set_overlay(es_overlay_all);     /* exit dialog + speed label, one slot */
     }
     psp_io_set_root(data);           /* disc0:/ -> <data>/disc, ms0:/ -> <data>/ms */
     {   /* Optional 1.02 data update: <data>/update/DATA.TPA; EMOTIONALSENSE_UPDATE=0 turns it off. */
@@ -709,7 +736,9 @@ int main(int argc, char **argv) {
             else psp_write32(a, v);
         }
         es_crash_tick();
+        djmax_mode_tick();
         fever_respect_tick();
+        djmax_speed_tick();
         score_sample_tick();
         if (unlock) unlock_content();
         for (int i = 0; i < poll_n; i++) {
@@ -794,5 +823,6 @@ int main(int argc, char **argv) {
     /* _Exit skips stdio teardown, so trace files still buffered here would be
      * lost. Flush them before leaving. */
     es_crash_flush();
+    djmax_speed_flush();
     host_exit_now(0);
 }

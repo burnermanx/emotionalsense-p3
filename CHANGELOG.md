@@ -16,8 +16,18 @@ build the rest from your own disc.
   with a pure Python LZ4 block decoder (no new dependency); the "ZSO not supported" message is gone.
   Tested byte for byte against the ISO, with blocks from the reference `lz4` compressor.
 
+- **Speed system** Respect (default) or Original (`EMOTIONALSENSE_SPEED`, `--speed`, launcher row): Auto Velocity,
+  R and L in steps of 0.1 from 1.0 to 7.0, the chosen number is the apparent speed on every song (lane speed =
+  speed x 100 / the chart's first tempo; tempo changes inside a song keep the game's proportion); a label `AV 2.3`
+  replaces the game's speed sprite, which only has art for .0 and .5. The chosen speed is remembered between
+  songs and sessions in `<data>/es_speed.json`; the game's own index byte always holds a valid value (`docs/speed.md`).
+- **MISSION always plays Original**: in the mission mode the Fever, scoring and speed options do not apply (the
+  missions are written for the PSP rules); no Respect record is written for a mission.
+- `EMOTIONALSENSE_SHOT_OVERLAY=1` puts the host overlay into captures (test aid).
+
 ### Changed
 
+- The launcher's option hint area shows three lines.
 - Development version is now `0.2.0-dev` (`--version`, the launcher, the kit manifest);
   `scripts/release.sh` drops the suffix when a release is prepared.
 

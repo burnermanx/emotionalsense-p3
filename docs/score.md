@@ -35,6 +35,11 @@ cannot be real, such as the torn-down judge, are rejected) and uses the last one
 
 The in-song HUD has no score in any mode (`0x1A600`, its number routine, is never called in 4T or 6.2T).
 
+## MISSION
+
+In a mission (play mode byte `0x130E5C` == 2, see `docs/speed.md`) the number the result screen shows is the game's own and
+nothing is written to `es_scores.json`, whatever `--score` says: a mission is not a Respect record.
+
 ## Not covered
 
 - "NEW RECORD" on the result screen follows the game's own record, in both modes.

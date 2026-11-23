@@ -314,6 +314,7 @@ class Ui:
             ("refresh", t("options.refresh"), t("options.refresh." + str(c.get("refresh", "native")))),
             ("fever", t("options.fever"), t("options.fever." + str(c.get("fever", "respect")))),
             ("score", t("options.score"), t("options.score." + str(c.get("score", "respect")))),
+            ("speed", t("options.speed"), t("options.speed." + str(c.get("speed", "respect")))),
             ("bga_smooth", t("options.bga"), t("options.bga." + str(c.get("bga_smooth", "0")))),
             ("update", t("options.update"), self.update_label()),
             ("renderer", t("options.renderer"), t("options.auto") if c["renderer"] == "auto" else c["renderer"]),
@@ -366,6 +367,7 @@ class Ui:
                 else t("options.hint_refresh") if key == "refresh"
                 else t("options.hint_fever") if key == "fever"
                 else t("options.hint_score") if key == "score"
+                else t("options.hint_speed") if key == "speed"
                 else t("options.hint_startmode") if key == "start_mode"
                 else t("options.hint_bga") if key == "bga_smooth"
                 else t("options.hint_texpack", size=self._tp().download_size_mb(), minutes=self._tp().ESTIMATE_MINUTES)
@@ -373,8 +375,10 @@ class Ui:
                 else t("options.hint_update") if key == "update" else t("options.hint_save"))
         if self.message and key == "update":
             hint = self.message
-        for j, ln in enumerate(self.wrap(hint, 17, 860)[:2]):
-            img.alpha_composite(self.text(ln, 17, th.DIM), (56, 452 + j * 22))
+        # three lines of 15 px fit between the last row and the footer (the hints of Fever, Scoring and Speed
+        # end with "in MISSION the Original rules apply")
+        for j, ln in enumerate(self.wrap(hint, 15, 860)[:3]):
+            img.alpha_composite(self.text(ln, 15, th.DIM), (56, 447 + j * 18))
         self._footer(img)
 
     def draw_texpack(self, img):
@@ -544,6 +548,8 @@ class Ui:
             c["fever"] = cyc(list(self.es_main.FEVER_VALUES), str(c.get("fever", "respect")))
         elif key == "score":
             c["score"] = cyc(list(self.es_main.SCORE_VALUES), str(c.get("score", "respect")))
+        elif key == "speed":
+            c["speed"] = cyc(list(self.es_main.SPEED_VALUES), str(c.get("speed", "respect")))
         elif key == "start_mode":
             c["start_mode"] = cyc(list(self.es_main.START_MODE_VALUES), str(c.get("start_mode", "last")))
         elif key == "bga_smooth":

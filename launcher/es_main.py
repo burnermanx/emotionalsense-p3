@@ -37,6 +37,7 @@ CONFIG_DEFAULTS = {
     "refresh": "native",      # full screen: native (borderless, desktop rate), auto (60, else 120 exclusive), 60, 120
     "fever": "respect",       # Fever mode: respect (automatic, lane speed kept) or original (PSP)
     "score": "respect",       # scoring display: respect (0..1,000,000 from the judgment %) or original (PSP)
+    "speed": "respect",       # speed system: respect (Auto Velocity, steps of 0.1, 1.0x-7.0x) or original (PSP, 0.5x-7.0x)
     "start_mode": "last",     # start in: last (remembered by the game), window, fullscreen (borderless)
     "bga_smooth": "0",        # background video: 0 (as the game draws it) or blend
     "update": True,           # use <data>/update/DATA.TPA when it exists
@@ -45,6 +46,7 @@ CONFIG_DEFAULTS = {
 REFRESH_VALUES = ("native", "auto", "60", "120")
 FEVER_VALUES = ("respect", "original")
 SCORE_VALUES = ("respect", "original")
+SPEED_VALUES = ("respect", "original")
 START_MODE_VALUES = ("last", "window", "fullscreen")
 BGA_VALUES = ("0", "blend")
 
@@ -169,6 +171,8 @@ def game_command(exe: Path, data: Path, cfg: dict, extra=(), confirm: str = "", 
     env["EMOTIONALSENSE_FEVER"] = fever if fever in FEVER_VALUES else "respect"
     score = cfg.get("score", "respect")
     env["EMOTIONALSENSE_SCORE"] = score if score in SCORE_VALUES else "respect"
+    speed = cfg.get("speed", "respect")
+    env["EMOTIONALSENSE_SPEED"] = speed if speed in SPEED_VALUES else "respect"
     env["EMOTIONALSENSE_FULLSCREEN"] = {"window": "0", "fullscreen": "1"}.get(str(cfg.get("start_mode", "last")), "auto")
     # The game's own prompts (exit confirmation) follow the launcher language.
     env["EMOTIONALSENSE_LANG"] = es_i18n.language()

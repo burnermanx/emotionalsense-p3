@@ -163,6 +163,7 @@ void __wrap_psp_func_000547F0(void)
 #define SCENE_PLAY    3u
 #define PLAYER_FLAG   36u
 static uint32_t g_song_player;
+void djmax_speed_song_start(uint32_t judge);   /* speed.c */
 
 void __real_psp_func_00077124(void);
 void __real_psp_func_0007718C(void);
@@ -170,7 +171,7 @@ void __real_psp_func_0007718C(void);
 void __wrap_psp_func_00077124(void)
 {
     uint32_t obj = psp_cpu.r[PSP_REG_A0];
-    if (SCENE_WORD == SCENE_PLAY) g_song_player = obj;
+    if (SCENE_WORD == SCENE_PLAY) { g_song_player = obj; djmax_speed_song_start(obj); }
     if (getenv("EMOTIONALSENSE_TRACE_PLAYER"))
         psp_log("player: start obj=%08X vb=%llu scene=%u ra=%08X\n",
                 obj, (unsigned long long)psp_display_vblanks(),
@@ -211,18 +212,32 @@ int djmax_playing(void)
  * remembers it in F+0x13C / F+0x13D so the end of the Fever scrolls back.
  *
  * Respect: F+0x148 is held at 1 by the host (see host.c), and those two calls
- * from the Fever are skipped, so the lane keeps the speed the player chose.
- * The wrap only answers for those two call sites; R still speeds up. */
+ * from the Fever are skipped (the wrap of 0x17E90 is in speed.c, next to the
+ * speed system, which it has to share the routine with), so the lane keeps the
+ * speed the player chose. R still speeds up. */
 int djmax_fever_respect = 0;
 
-void __real_psp_func_00017E90(void);
+/* ---- the play mode: MISSION always plays Original (round 35, R) ------------------
+ *
+ * The game keeps the play mode in the options struct at 0x130E58, byte +4 (0x130E5C):
+ *   0  CLASSIC and the other styles        1  FREE STYLE        2  MISSION
+ * The menus write it before the match scene is entered: 0x273B4 (style select, 0),
+ * 0x279C4 (FREE STYLE, 1) and 0x3B400 (the mission list, 2, together with +8 = 0xFF).
+ * 0x53C7C and the speed buttons (0x1FBC0..) read the same byte (== 2 is "mission"
+ * there too).
+ *
+ * djmax_mission_active() is that byte read live while no match runs, and frozen
+ * from the moment the match scene (3) is entered, so nothing flips in the middle of
+ * a song. The Fever, the scoring and the speed system of the host consult it: in a
+ * mission all three are Original, whatever the options say. */
+#define PLAY_MODE_BYTE 0x00130E5Cu
+static int g_mission;
 
-void __wrap_psp_func_00017E90(void)
+int djmax_mission_active(void)
 {
-    uint32_t ra = psp_cpu.r[PSP_REG_RA];
-    if (djmax_fever_respect && (ra == 0x000255C0u || ra == 0x000255F0u)) {
-        psp_cpu.r[PSP_REG_V0] = 0;   /* "no step taken": the Fever does not remember one either */
-        return;
-    }
-    __real_psp_func_00017E90();
+    if (psp_scene_now() != 3) g_mission = psp_read8(PLAY_MODE_BYTE) == 2;
+    return g_mission;
 }
+
+/* host.c, every vblank: keeps the frozen value current while no match runs. */
+void djmax_mode_tick(void) { (void)djmax_mission_active(); }

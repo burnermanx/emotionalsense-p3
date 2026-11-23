@@ -146,3 +146,95 @@ life="${J}+0x7FC:0x42C80000"
 check_score "max respect" score_max respect max "$life,${J}+0x560*+0x10:0x7f:1"
 check_score "max original" score_max original original "$life,${J}+0x560*+0x10:0x7f:1"
 check_score "low formula" score_low respect formula "$life"
+
+# --- Respect speed (SP, round 35). A fresh copy of the save per run (the list remembers the last song).
+fresh_data() {   # prints a new data dir (disc/module linked, ms copied), the caller removes it
+    d=$(mktemp -d)
+    ln -s "$data/disc" "$d/disc"; ln -s "$data/module" "$d/module"; cp -a "$data/ms" "$d/ms"
+    case $(cd "$d" && pwd -P) in */work/data) echo "refusing to run on work/data" >&2; return 1 ;; esac
+    echo "$d"
+}
+# Buttons: 18 L from 2.5 (25 tenths) stop at 1.0 (three refused), 20 R give 3.0, 40 R reach 7.0, three more are refused.
+check_speed_keys() {
+    log=$(mktemp); sdata=$(fresh_data)
+    EMOTIONALSENSE_SPEED=respect EMOTIONALSENSE_POKE="${J}+0x7FC:0x42C80000" \
+    EMOTIONALSENSE_CONFIRM=circle EMOTIONALSENSE_SCRIPT="@$root/scripts/speed_keys.script" EMOTIONALSENSE_POLL=scene \
+        SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=dummy \
+        "$game" --data "$sdata" --frames 3400 --renderer null >/dev/null 2>"$log" || true
+    ok=1
+    [ "$(grep -c 'speed: down ->' "$log")" = 15 ] || ok=0                  # 25 -> 10, the other three refused
+    [ "$(grep -c 'speed: up ->' "$log")" = 60 ] || ok=0                    # 10 -> 70, the other three refused
+    grep -q 'speed: down -> 1.0 ' "$log" || ok=0
+    grep 'speed: up ->' "$log" | sed -n 20p | grep -q 'up -> 3.0 ' || ok=0 # the 20th R from 1.0
+    grep 'speed: up ->' "$log" | tail -1 | grep -q 'up -> 7.0 ' || ok=0
+    if grep -q 'down -> 0\.\|up -> 7\.[1-9]' "$log"; then ok=0; fi
+    if [ "$ok" != 1 ]; then echo "FAIL: speed buttons" >&2; grep 'speed:' "$log" | head -5 >&2; rm -rf "$log" "$sdata"; return 1; fi
+    rm -rf "$log" "$sdata"
+    echo "OK: speed buttons: 15 L reach 1.0 and stop, 20 R from 1.0 give 3.0, R stops at 7.0"
+}
+check_speed_keys
+
+# Scroll speed in the captured picture: the same Auto Velocity number gives the same speed on a 114 and a 196
+# BPM song (+-1 %); Original gives the PSP proportion (the tempo ratio, +-6 %: few lines are visible at a time). Needs the Vulkan renderer
+# and python3 with PIL; skipped (and said so) when either is missing.
+measure_song() {   # script mode -> prints "px_per_vblank tempo"
+    sdata=$(fresh_data); log=$(mktemp); shots=$(mktemp -d)
+    export EMOTIONALSENSE_SPEED=$2 EMOTIONALSENSE_POKE="${J}+0x7FC:0x42C80000" EMOTIONALSENSE_CONFIRM=circle \
+           EMOTIONALSENSE_CLOCK=virtual EMOTIONALSENSE_UNCAP=1 SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=dummy
+    EMOTIONALSENSE_SCRIPT="@$root/scripts/$1.script" EMOTIONALSENSE_POLL=scene \
+        "$game" --data "$sdata" --frames 3300 --renderer vulkan >/dev/null 2>"$log" || true
+    s3=$(grep '0x0805E874 = 0x00000003' "$log" | head -1 | sed 's/poll\[\([0-9]*\)\].*/\1/')
+    tempo=$(grep -o 'chart tempo [0-9.]*' "$log" | head -1 | sed 's/chart tempo //')
+    a=$((s3 + 500)); b=$((a + 398))
+    list=$(python3 -c "print(','.join(str(x) for x in range($a, $b + 1, 2)))")
+    EMOTIONALSENSE_SCRIPT="@$root/scripts/$1.script" EMOTIONALSENSE_SHOT="$list" EMOTIONALSENSE_SHOT_DIR="$shots" \
+        "$game" --data "$sdata" --frames $((b + 5)) --renderer vulkan --internal-scale 2 >/dev/null 2>"$log" || true
+    px=$(python3 -I "$root/scripts/measure_speed.py" "$shots" $a $b 2 | sed -n 's/^px_per_vblank \([0-9.]*\).*/\1/p')
+    unset EMOTIONALSENSE_SPEED EMOTIONALSENSE_POKE EMOTIONALSENSE_CLOCK EMOTIONALSENSE_UNCAP
+    rm -rf "$sdata" "$log" "$shots"
+    echo "$px ${tempo:-0}"
+}
+if python3 -c "import PIL" 2>/dev/null && [ "${ES_CHECK_NO_VULKAN:-0}" != 1 ]; then
+    set -- $(measure_song speed_a respect); ra=$1; ta=$2
+    set -- $(measure_song speed_b respect); rb=$1; tb=$2
+    set -- $(measure_song speed_a original); oa=$1
+    set -- $(measure_song speed_b original); ob=$1
+    if python3 - "$ra" "$rb" "$oa" "$ob" "$ta" "$tb" <<'PY'
+import sys
+ra, rb, oa, ob, ta, tb = (float(x or 0) for x in sys.argv[1:7])
+if min(ra, rb, oa, ob, ta, tb) <= 0:
+    sys.exit("measurement failed: %s" % sys.argv[1:])
+r = rb / ra; o = ob / oa; want = tb / ta
+print("   respect: %.4f vs %.4f px/vblank (B/A %.4f, tempo %g / %g); original: %.4f vs %.4f (B/A %.3f, tempo ratio %.3f)"
+      % (ra, rb, r, ta, tb, oa, ob, o, want))
+sys.exit(0 if abs(r - 1) <= 0.01 and abs(o / want - 1) <= 0.06 else 1)
+PY
+    then echo "OK: speed: Respect keeps the scroll speed across songs (+-1 %), Original keeps the PSP's tempo proportion"
+    else echo "FAIL: speed in px/s" >&2; exit 1; fi
+else
+    echo "SKIP: speed in px/s (needs python3 with PIL and a Vulkan renderer)"
+fi
+
+# --- MISSION is always Original (R). Every option is Respect; the mission route hammers the lanes with the life
+# held and the MAX window wide, and the game's auto-fever flag forced to 0 (as check_fever does): in FreeStyle the
+# host's Respect starts the Fever by itself (check_fever above), in the mission it must wait for CROSS; no speed
+# song start is logged (the game's index stands); no Respect record is written.
+check_mission() {
+    log=$(mktemp); sdata=$(fresh_data)
+    EMOTIONALSENSE_FEVER=respect EMOTIONALSENSE_SCORE=respect EMOTIONALSENSE_SPEED=respect \
+    EMOTIONALSENSE_POKE="$fever_pokes" EMOTIONALSENSE_POLL="${J}+0x564*+0x13A:b,${J}+0x564*+0x13B:b,0x130E5C:b" \
+    EMOTIONALSENSE_CONFIRM=circle EMOTIONALSENSE_SCRIPT="@$root/scripts/mission_fever.script" \
+        SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=dummy \
+        "$game" --data "$sdata" --frames 5000 --renderer null >/dev/null 2>"$log" || true
+    ok=1
+    grep -q '0x00130E5C = 0x00000002' "$log" || ok=0                       # the play mode byte says MISSION
+    full=$(grep '= 0x00000001' "$log" | grep -v '0x00130E5C' | head -1 | sed 's/poll\[\([0-9]*\)\].*/\1/')
+    run=$(grep '= 0x00000001' "$log" | grep -v '0x00130E5C' | sed -n 2p | sed 's/poll\[\([0-9]*\)\].*/\1/')
+    [ -n "$full" ] && [ -n "$run" ] && [ $((run - full)) -ge 10 ] || ok=0 # gauge full, the Fever waited for CROSS
+    ! grep -q 'speed: song start' "$log" || ok=0
+    [ ! -f "$sdata/es_scores.json" ] || ok=0
+    if [ "$ok" != 1 ]; then echo "FAIL: mission is Original (full=$full run=$run)" >&2; grep -E 'poll\[|speed:|score:' "$log" | head -12 >&2; rm -rf "$log" "$sdata"; return 1; fi
+    rm -rf "$log" "$sdata"
+    echo "OK: mission with Respect options: Fever waited for CROSS (gauge full at vblank $full, started $run), game's speed, no record"
+}
+check_mission

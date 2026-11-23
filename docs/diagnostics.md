@@ -96,6 +96,9 @@ EMOTIONALSENSE_SYNC_LOG=1 ./EmotionalSense-P3-0.1.0-linux-x86_64.AppImage --run
 | `EMOTIONALSENSE_TRACE_PACK` | pack removals (`0x7F438`) | |
 | `EMOTIONALSENSE_TRACE_HLE_THREAD=<uid>` | one line per HLE call of that thread: `hle[uid@vblank]: name(a0..a3) ra=0x... t=us` | `all` traces every thread |
 | `EMOTIONALSENSE_POKE` | `0xADDR:value[:size]` written at every vblank | debugging only; e.g. life at `0x088D12CC:0x42C80000`; pointer paths are accepted (see the README) |
+| `EMOTIONALSENSE_SPEED` / `--speed` | `respect` (default) or `original` | see `speed.md` |
+| `EMOTIONALSENSE_TRACE_SPEED` | logs the chart header and the judge's tempo at the song-start call sites | |
+| `EMOTIONALSENSE_SHOT_OVERLAY` | `1`: the captures (`EMOTIONALSENSE_SHOT`, `--capture`, F12) carry the host overlay (the speed label, the exit dialog) | a test aid; the window's compositor cannot be captured from a script |
 | `EMOTIONALSENSE_DEBUG_FB` | logs `SetFrameBuf` changes | |
 | `EMOTIONALSENSE_DEBUG_THREADS` | thread creation/end | |
 | `EMOTIONALSENSE_DEBUG_VPL` | VPL allocation failures | |

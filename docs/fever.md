@@ -51,6 +51,9 @@ eases to 3.0 (0.05 per vblank); at the end it goes back.
   with "no step taken", so the lane keeps the speed the player chose. R and L
   still change the speed as always.
 
+**MISSION** always plays Original: the missions' conditions are written for the PSP rules, so in a mission the host
+neither forces the auto flag nor skips the speed steps, whatever `--fever` says (`djmax_mission_active()`, see `docs/speed.md`).
+
 ## What it does to the save
 
 Nothing is written specially: no variable of the records, the ranking or an

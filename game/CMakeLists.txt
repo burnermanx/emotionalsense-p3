@@ -16,7 +16,7 @@ endif()
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavcodec libavutil)
 
-add_executable(emotionalsense host.c crash.c app_icon.c update_overlay.c exit_dialog.c exit_text.c hle_djmax.c guest_patches.c score.c at3_dec.c avc_dec.c ${gen_srcs})
+add_executable(emotionalsense host.c crash.c app_icon.c update_overlay.c exit_dialog.c exit_text.c hle_djmax.c guest_patches.c score.c speed.c speed_glyphs.c at3_dec.c avc_dec.c ${gen_srcs})
 # The file (and so the process) is called EmotionalSense-P3-game: other ports will
 # live in separate projects, so the name must say which game it is.
 set_target_properties(emotionalsense PROPERTIES OUTPUT_NAME "EmotionalSense-P3-game")
@@ -40,6 +40,8 @@ if(NOT MSVC)
         -Wl,--wrap=psp_func_00077124
         -Wl,--wrap=psp_func_0007718C
         -Wl,--wrap=psp_func_00017E90
+        -Wl,--wrap=psp_func_00017F04
+        -Wl,--wrap=psp_func_0001B40C
         -Wl,--wrap=psp_func_00042064
         -Wl,--wrap=psp_func_000552C4
         -Wl,--build-id=sha1)

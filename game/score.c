@@ -39,6 +39,7 @@
 #endif
 
 int djmax_score_respect = 1;      /* host.c: EMOTIONALSENSE_SCORE / --score */
+int djmax_mission_active(void);   /* guest_patches.c: MISSION is always Original (round 35) */
 
 /* ---- the numbers, captured while the song plays ----------------------------- */
 
@@ -177,6 +178,8 @@ void __wrap_psp_func_000552C4(void)
                 (unsigned long long)psp_display_vblanks(), ra, st, so, di);
     if (ra == 0x000319F8u) {                 /* song select panel */
         g_sel_style = st; g_sel_song = so; g_sel_diff = di; g_sel_valid = 1;
+    } else if (ra == 0x00043F78u && g_cnt && djmax_mission_active()) {
+        psp_log("score: mission, the game's score stands and no Respect record is written\n");
     } else if (ra == 0x00043F78u && g_cnt) { /* result screen, stage cleared */
         uint32_t v = (uint32_t)djmax_respect_value(g_sum, g_cnt);
         psp_log("score: result style=%u song=%u diff=%u respect=%u (weights %llu / %u notes, game JUD. %llu.%llu%%)\n",
@@ -201,7 +204,7 @@ void __wrap_psp_func_00042064(void)
         psp_log("score: num42064 vb=%llu ra=%08X a1=%u a2=%u a3=%u\n",
                 (unsigned long long)psp_display_vblanks(), ra,
                 psp_cpu.r[PSP_REG_A1], psp_cpu.r[PSP_REG_A2], psp_cpu.r[PSP_REG_A3]);
-    if (djmax_score_respect && ra == 0x00043C7Cu && g_cnt) {
+    if (djmax_score_respect && ra == 0x00043C7Cu && g_cnt && !djmax_mission_active()) {
         uint32_t v = (uint32_t)djmax_respect_value(g_sum, g_cnt);
         psp_log("score: result shows Respect %u (the game's own: %u)\n", v, psp_cpu.r[PSP_REG_A1]);
         psp_cpu.r[PSP_REG_A1] = v;

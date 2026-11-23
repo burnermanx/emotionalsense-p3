@@ -29,6 +29,9 @@ https://github.com/notofonts/noto-cjk) by a one-off script (not part of the repo
 ours; the OFL permits embedding rasterised glyphs, and the bitmaps are not a
 font. No game art is used.
 
+`game/speed_glyphs.c` holds the glyphs of the Respect speed label ("AV 2.3": `A`, `V`, the digits and the point) as 8-bit
+coverage masks rasterised from the same **Noto Sans CJK Bold** (SIL OFL 1.1) by `scripts/gen_speed_glyphs.py`.
+
 The fonts are subset to the characters the launcher's own text needs; the OFL
 permits this and the subsets keep the reserved font name rules (they are not
 sold on their own). Translations for Spanish, Japanese and Korean were written
