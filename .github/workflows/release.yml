@@ -214,7 +214,9 @@ jobs:
             "dist/EmotionalSense-P3-$version-${{ matrix.target }}.AppImage" \
             "dist/EmotionalSense-P3-$version-${{ matrix.target }}.tar.gz"
           mkdir -p out
+          # the .zsync lets AppImageUpdate update the AppImage from the latest release
           cp "dist/EmotionalSense-P3-$version-${{ matrix.target }}.AppImage" \
+             "dist/EmotionalSense-P3-$version-${{ matrix.target }}.AppImage.zsync" \
              "dist/EmotionalSense-P3-$version-${{ matrix.target }}.tar.gz" out/
 
       - uses: actions/upload-artifact@v4
@@ -387,8 +389,9 @@ jobs:
           for t in linux-x86_64 linux-aarch64 windows-x86_64 windows-arm64; do
             cp parts/$t/EmotionalSense-P3-* release/
           done
-          # the six packages and nothing else of this shape
-          test "$(ls release/EmotionalSense-P3-* | wc -l)" = 6
+          # the six packages, the two .zsync of the AppImages and nothing else of this shape
+          test "$(ls release/EmotionalSense-P3-* | wc -l)" = 8
+          test "$(ls release/*.AppImage.zsync | wc -l)" = 2
           python3 scripts/release_guard.py release/*
           (cd release && sha256sum * > SHA256SUMS)
           cat release/SHA256SUMS
