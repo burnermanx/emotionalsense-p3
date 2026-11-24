@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* 0x7F438 -- PackManager remove(type): erase every entry of the pack stack
  * (a std::deque<Pack*> at *(mgr+72), 32 pointers per node) whose type id,
@@ -248,3 +249,53 @@ int djmax_mission_active(void)
 
 /* host.c, every vblank: keeps the frozen value current while no match runs. */
 void djmax_mode_tick(void) { (void)djmax_mission_active(); }
+
+/* 0x163C -- open a message window (a0 manager, a1 message id, a2 1, a3 0, t0 an argument pointer).
+ *
+ * Round 36c. The result screen announces what the song's level-up or its clear "unlocked": a new item (the box the
+ * player opened, and the rows of the unlock table in the game's data), a 3.2T / 4.2T unlock, a special mission. The game
+ * decides "new" from the player's LEVEL and from the rows it walks (0x42EB8 / 0x43CD4 / 0x4183C state machine at
+ * obj+40), not from the unlock bits: the forced unlock sets every bit from the start, the notice still comes when the
+ * level crosses the row's level. So with the unlock options on we do not open these windows:
+ *   0x413A8                the box item  ("You have acquired a new character / SS pattern ...": the message id is the
+ *                          item type's, from 0x404C0)                          -> only with unlock_items
+ *   0x4321C / 0x4326C      the rows' items (halfwords +272 / +274)             -> only with unlock_items
+ *   0x413FC / 0x4142C      "3.2T / 4.2T unlocked" (ids 0x1D / 0x1E, when the level is 2 / 5)  -> unlock (modes)
+ * Nothing else is touched: the "level up" window and the box reveal ("Congratulations") are not 0x163C windows or are
+ * not at these call sites, and the special mission (id 0x12, 0x43028) is not part of the unlock, so it stays.
+ * The save is written exactly as before (the game still marks the item and the notice flags; only the window is not
+ * opened, and the state machine goes on, because it waits for the window's busy flag and a window that was never
+ * opened is not busy).
+ *
+ * EMOTIONALSENSE_TRACE_MSG=1 logs every call: vblank, message id, the call site. */
+void __real_psp_func_0000163C(void);
+
+static int unlock_env(const char *name)
+{
+    const char *e = getenv(name);
+    return !(e && !strcmp(e, "0"));
+}
+
+void __wrap_psp_func_0000163C(void)
+{
+    static int trace = -1, unlock = -1, items = -1;
+    if (trace < 0) {
+        trace = getenv("EMOTIONALSENSE_TRACE_MSG") != NULL;
+        /* EMOTIONALSENSE_SHOW_NOTICES=1: keep every notice (test aid: the same run with and without the skip) */
+        const char *show = getenv("EMOTIONALSENSE_SHOW_NOTICES");
+        const int keep = show && *show && strcmp(show, "0");
+        unlock = !keep && unlock_env("EMOTIONALSENSE_UNLOCK");
+        items = unlock && unlock_env("EMOTIONALSENSE_UNLOCK_ITEMS");
+    }
+    const uint32_t ra = psp_cpu.r[PSP_REG_RA];
+    int skip = 0;
+    if (psp_scene_now() == 4) {
+        if (items && (ra == 0x000413A8u || ra == 0x0004321Cu || ra == 0x0004326Cu)) skip = 1;
+        if (unlock && (ra == 0x000413FCu || ra == 0x0004142Cu)) skip = 1;
+    }
+    if (trace)
+        psp_log("msg: vb=%llu id=0x%X ra=0x%08X scene=%u %s\n", (unsigned long long)psp_display_vblanks(),
+                (unsigned)psp_cpu.r[PSP_REG_A1] & 0xFFFFu, ra, (unsigned)psp_scene_now(), skip ? "skipped" : "shown");
+    if (skip) { psp_cpu.r[PSP_REG_V0] = 0; return; }
+    __real_psp_func_0000163C();
+}

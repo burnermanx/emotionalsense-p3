@@ -88,7 +88,9 @@ EMOTIONALSENSE_SYNC_LOG=1 ./EmotionalSense-P3-0.1.0-linux-x86_64.AppImage --run
 | `EMOTIONALSENSE_TRACE_MPEG` | ring buffer, demuxed packets, AUs, PTS | see `mpeg-psmf.md` |
 | `EMOTIONALSENSE_TRACE_CLOCK` | every 60 vblanks: real time, guest clock, audio blocks, interrupts, vblanks | one line per window |
 | `EMOTIONALSENSE_TRACE_CTRL` | buttons read per frame | |
-| `EMOTIONALSENSE_TRACE_INPUT` | bits the script injected | |
+| `EMOTIONALSENSE_TRACE_INPUT` | bits the script injected, and every change of the pressed triggers with the answer of the 2T trigger hook | |
+| `EMOTIONALSENSE_TRACE_MSG` | every message window the game opens (vblank, id, call site, shown or skipped) | the result screen's notices, `docs/unlock-table.md` |
+| `EMOTIONALSENSE_SHOW_NOTICES` | `1` keeps every result-screen notice even with the unlock on | test aid: the same run with and without the skip |
 | (script masks above 16 bits) | `0x10000` left trigger, `0x20000` right trigger, `0x40000` the E key (stick left), `0x80000` the R key (stick right) | test routes for the 2T triggers; `EMOTIONALSENSE_TRACE_CTRL` prints the stick X (`ax=`) |
 | `EMOTIONALSENSE_TRACE_UMD` | registration of the UMD callback and the verdict of the anti-copy check | see `anti-copy.md` |
 | `EMOTIONALSENSE_TRACE_UTIL` | `sceUtilityGetSystemParamInt` and `SavedataInitStart` | |
@@ -96,7 +98,7 @@ EMOTIONALSENSE_SYNC_LOG=1 ./EmotionalSense-P3-0.1.0-linux-x86_64.AppImage --run
 | `EMOTIONALSENSE_TRACE_VPL` | VPL allocations | |
 | `EMOTIONALSENSE_TRACE_PACK` | pack removals (`0x7F438`) | |
 | `EMOTIONALSENSE_TRACE_HLE_THREAD=<uid>` | one line per HLE call of that thread: `hle[uid@vblank]: name(a0..a3) ra=0x... t=us` | `all` traces every thread |
-| `EMOTIONALSENSE_POKE` | `0xADDR:value[:size]` written at every vblank | debugging only; e.g. life at `0x088D12CC:0x42C80000`; pointer paths are accepted (see the README) |
+| `EMOTIONALSENSE_POKE` | `0xADDR:value[:size]` written at every vblank | debugging only; e.g. life at `0x088D12CC:0x42C80000`; pointer paths are accepted (see the README); a leading `<` pokes only before the gameplay scene (a low-level profile for a result route) |
 | `EMOTIONALSENSE_SPEED` / `--speed` | `respect` (default) or `original` | see `speed.md` |
 | `EMOTIONALSENSE_BUTTONS` / `--buttons` | `auto` (default), `playstation`, `xbox`, `steamdeck`, `switch` | see `buttons.md` |
 | `EMOTIONALSENSE_TRIGGERS_2T` / `--triggers-2t` | `stick` (default) or `lr` | see `buttons.md` |

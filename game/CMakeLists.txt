@@ -48,6 +48,7 @@ if(NOT MSVC)
         -Wl,--wrap=psp_func_00059AC4
         -Wl,--wrap=psp_func_00042064
         -Wl,--wrap=psp_func_000552C4
+        -Wl,--wrap=psp_func_0000163C
         -Wl,--build-id=sha1)
 endif()
 install(TARGETS emotionalsense RUNTIME DESTINATION bin)

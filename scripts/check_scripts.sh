@@ -202,7 +202,7 @@ check_effector() {
 check_effector
 # R and L (and LT / RT) during the song, in each of the five styles: the first five presses (R L R R L) give S+1 S S+1 S+2 S+1.
 # LT / RT: 4T and 6T are L / R (two more steps); with triggers_2t=stick they are the analog stick in 3.2T and 4.2T (no step).
-# The 6.2T stick-right gave one more step in the measurement (the game's own handling of the pushed stick): at least 5.
+# 6.2T too: exactly 5 (LT/RT are the stick, never a step; 14 runs measured in round 36c, none with a sixth).
 check_speed_play() {   # style
     log=$(mktemp); sdata=$(fresh_data)
     EMOTIONALSENSE_SPEED=respect EMOTIONALSENSE_POKE="${J}+0x7FC:0x42C80000" EMOTIONALSENSE_CONFIRM=circle \
@@ -213,7 +213,7 @@ check_speed_play() {   # style
     got=$(grep -o 'speed: \(up\|down\) -> [0-9.]*' "$log" | sed 's/speed: //' | head -5 | tr '\n' ' ' | sed 's/ $//')
     [ "$got" = "$(echo $want)" ] || ok=0
     n=$(grep -c 'speed: \(up\|down\) ->' "$log" || true)
-    case $1 in 4t|6t) [ "$n" = 7 ] || ok=0 ;; 32t|42t) [ "$n" = 5 ] || ok=0 ;; *) [ "$n" -ge 5 ] || ok=0 ;; esac
+    case $1 in 4t|6t) [ "$n" = 7 ] || ok=0 ;; 32t|42t) [ "$n" = 5 ] || ok=0 ;; *) [ "$n" = 5 ] || ok=0 ;; esac
     last=$(grep -o 'speed: \(up\|down\) -> [0-9]*\.[0-9]' "$log" | tail -1 | sed 's/.*-> //; s/\.//')
     saved=$(sed -n 's/.*"tenths": \([0-9]*\).*/\1/p' "$sdata/es_speed.json" 2>/dev/null | head -1)
     [ -n "$saved" ] && [ "$saved" = "$last" ] || ok=0    # the value of the last step is the shared one (list, pause, effector, next song)
@@ -345,6 +345,40 @@ check_speed_list() {
     echo "OK: song list: L twice from $(( s / 10 )).$(( s % 10 )) = $(( b / 10 )).$(( b % 10 )), the song starts at it"
 }
 check_speed_list
+
+# --- U1 (round 36c): the result screen's "new content" notices with everything unlocked. A throwaway profile (level 1, experience 300:
+# the poke before the gameplay scene, "<") makes the song end in a level up to 2, which the game announces with: the box item (message
+# 0xC here), "3.2T unlocked" (0x1D) and a special mission (0x12). With the unlock on the first two are not opened (the level up and the
+# box reveal stay), the mission stays (not part of the unlock); with EMOTIONALSENSE_UNLOCK=0 (or SHOW_NOTICES=1) all three open as the
+# game does, and the SD.BIN of a skipped and a shown run (same inputs, same copy of the save) is byte for byte the same.
+check_unlock_notices() {
+    prof=$(printf '0x%X' $(( ((300 << 11) | (1 << 4)) ^ 0xC34F931B )))
+    d1=$(fresh_data); d2=$(fresh_data); d3=$(fresh_data); l1=$(mktemp); l2=$(mktemp); l3=$(mktemp)
+    run_notices() {   # datadir log env
+        env $3 EMOTIONALSENSE_TRACE_MSG=1 EMOTIONALSENSE_POKE="<0x130EAC:$prof,${J}+0x7FC:0x42C80000,${J}+0x560*+0x10:0x7f:1" \
+        EMOTIONALSENSE_POLL=scene EMOTIONALSENSE_CONFIRM=circle EMOTIONALSENSE_SCRIPT="@$root/scripts/unlock_notices.script" \
+            SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=dummy "$game" --data "$1" --frames 9800 --renderer null >/dev/null 2>"$2" || true
+    }
+    run_notices "$d1" "$l1" EMOTIONALSENSE_UNLOCK=1 &
+    run_notices "$d2" "$l2" EMOTIONALSENSE_SHOW_NOTICES=1 &
+    run_notices "$d3" "$l3" EMOTIONALSENSE_UNLOCK=0 &
+    wait
+    ok=1
+    for id in 0xC 0x1D; do
+        grep -q "msg: .* id=$id .* skipped" "$l1" || ok=0                    # unlock on: not opened
+        grep -q "msg: .* id=$id .* shown" "$l2" || ok=0                      # SHOW_NOTICES: opened
+        grep -q "msg: .* id=$id .* shown" "$l3" || ok=0                      # unlock off: opened as before
+    done
+    grep -q "msg: .* id=0x12 .* shown" "$l1" || ok=0                         # the special mission is not unlocked by us
+    grep -q 'poll\[[0-9]*\]: 0x0805E874 = 0x0000000A' "$l1" || ok=0         # still goes through the level-up scene
+    grep 'poll\[' "$l1" | grep -A1 '0x0805E874 = 0x0000000A' | grep -q '0x0805E874 = 0x00000002' || ok=0   # and back to the list
+    sd1=$(md5sum "$d1"/ms/PSP/SAVEDATA/*/SD.BIN | cut -d' ' -f1); sd2=$(md5sum "$d2"/ms/PSP/SAVEDATA/*/SD.BIN | cut -d' ' -f1)
+    [ "$sd1" = "$sd2" ] || ok=0
+    if [ "$ok" != 1 ]; then echo "FAIL: unlock notices (SD.BIN $sd1 / $sd2)" >&2; grep -h 'msg:' "$l1" "$l2" "$l3" >&2; rm -rf "$d1" "$d2" "$d3" "$l1" "$l2" "$l3"; return 1; fi
+    rm -rf "$d1" "$d2" "$d3" "$l1" "$l2" "$l3"
+    echo "OK: unlock notices: box item and 3.2T notice skipped with the unlock on, shown with it off; special mission kept; SD.BIN identical"
+}
+check_unlock_notices
 
 # --- B: button style. The PLAY MODE SELECT footer (No / Yes) is repainted: Xbox letters are green (A) and red (B); the PlayStation
 # footer has no such colours. Needs PIL and Vulkan (skipped otherwise).

@@ -756,7 +756,12 @@ int main(int argc, char **argv) {
             snap_next++;
         }
         for (int i = 0; i < poke_n; i++) {
-            uint32_t a = poke_resolve(poke_expr[i]), v = poke_value[i];
+            /* a leading '<' (e.g. "<0x130EAC:...") pokes only before the gameplay scene, so the game's own
+             * writes after the song (experience, level) are not overwritten: a low-level profile for the
+             * result routes. */
+            const char *ex = poke_expr[i];
+            if (*ex == '<') { if (psp_scene_now() >= 3) continue; ex++; }
+            uint32_t a = poke_resolve(ex), v = poke_value[i];
             if (!a) continue;
             if (poke_size[i] == 1) psp_write8(a, (uint8_t)v);
             else if (poke_size[i] == 2) psp_write16(a, (uint16_t)v);

@@ -31,7 +31,10 @@ int djmax_triggers_stick = 1;            /* the option: 1 stick (default), 0 lr 
 #define STYLE_BYTE 0x00130E5Du           /* options struct 0x130E58 +5: 0 4T, 1 6T, 2 3.2T, 3 4.2T, 4 6.2T */
 
 static int triggers_as_stick_now(void) {
-    if (!djmax_triggers_stick || !djmax_playing()) return 0;
+    /* The gameplay scene and the style byte only: the answer must not depend on the song player's
+     * flag (PAUSE / start / a player that changed), which is what the first version read. Outside
+     * a song nothing reads the stick as a side note, so a trigger as the stick there is harmless. */
+    if (!djmax_triggers_stick || psp_scene_now() != 3u) return 0;
     uint8_t st = psp_read8(STYLE_BYTE);
     return st >= 2 && st <= 4;
 }

@@ -43,6 +43,14 @@ build the rest from your own disc.
 
 ### Changed
 
+- **No repeated "new content" notices with everything unlocked.** The result screen used to announce, after the level up,
+  "You have acquired a new character / SS pattern ..." and "3.2 Trax / 4.2T unlocked" even though the unlock options had made
+  all of it available from the start (the game decides "new" from the player's level and the rows of its unlock table, not
+  from the unlock bits). With the unlock on those windows are not opened; the level-up window and the item-box reveal stay,
+  and so does the special-mission notice (missions are not part of the unlock). With `EMOTIONALSENSE_UNLOCK=0` the game's notices
+  appear as before (`EMOTIONALSENSE_UNLOCK_ITEMS=0` keeps the item notices). `SD.BIN` is written exactly as before
+  (`docs/unlock-table.md`).
+- The 2T triggers in `stick` mode no longer depend on the song player's flag, only on the gameplay scene and the style byte.
 - The title screen's exit dialog looks like the game's own boxes: an opaque black panel with a thin gold outline, the question in
   white with wide spacing, YES / NO in condensed bold capitals with the chosen one on an orange bar, nothing dimmed and no button hints
   (drawn by code at any internal scale and on the software renderer; the texts are rasterised by `scripts/gen_exit_text.py`).
