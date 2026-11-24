@@ -23,10 +23,10 @@ derived from them are **not** part of any release.
 
 ## Exit dialog text
 
-`game/exit_text.c` holds the five "Quit the game? / Yes / No" prompts as 1-bit
-bitmaps rasterised once from **Noto Sans CJK Bold** (SIL OFL 1.1,
-https://github.com/notofonts/noto-cjk) by a one-off script (not part of the repository). The texts are
-ours; the OFL permits embedding rasterised glyphs, and the bitmaps are not a
+`game/exit_text.c` holds the five "Quit the game? / YES / NO" prompts as 8-bit
+coverage masks rasterised from **Noto Sans CJK Bold** (SIL OFL 1.1,
+https://github.com/notofonts/noto-cjk) by `scripts/gen_exit_text.py`. The texts are
+ours; the OFL permits embedding rasterised glyphs, and the masks are not a
 font. No game art is used.
 
 `game/speed_glyphs.c` holds the glyphs of the Respect speed label ("AV 2.3": `A`, `V`, the digits and the point) as 8-bit

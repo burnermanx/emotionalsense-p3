@@ -111,7 +111,7 @@
  "options.fever": "Fever mode",
  "options.fever.respect": "Respect (automatic)",
  "options.fever.original": "Original (PSP)",
- "options.hint_fever": "Respect: Fever starts by itself when the gauge fills and the lane speed stays as you set it at Fever x4 and above. Original: Fever starts with the X button and the lane speeds up at x4 and above, as on the PSP. In MISSION mode the Original rules always apply.",
+ "options.hint_fever": "Respect: Fever starts by itself when the gauge fills and the lane speed stays as you set it at Fever x4 and above. Original: Fever starts with the {fever_btn} button and the lane speeds up at x4 and above, as on the PSP. In MISSION mode the Original rules always apply.",
  "options.score": "Scoring system",
  "options.score.respect": "Respect (0 to 1,000,000)",
  "options.score.original": "Original (PSP)",
@@ -156,5 +156,18 @@
  "texpack.no_vulkan": "This option needs a Vulkan graphics driver, and none was found.",
  "texpack.no_net": "Could not download the tools (is the network down?): {error}",
  "texpack.unsupported": "Not available on this platform yet: the upscaling tools have no {arch} build.",
- "texpack.not_ready": "Prepare the game first."
+ "texpack.not_ready": "Prepare the game first.",
+ "options.buttons": "Button symbols",
+ "options.buttons.auto": "Auto (last controller)",
+ "options.buttons.playstation": "PlayStation",
+ "options.buttons.xbox": "Xbox",
+ "options.buttons.steamdeck": "Steam Deck",
+ "options.buttons.switch": "Switch",
+ "options.hint_buttons": "The game's button prompts (OK, Cancel, Yes, No, ...) and this launcher show the buttons of the chosen pad: Xbox (coloured A B X Y), Steam Deck (A B X Y) or Switch (B A Y X by position). Auto follows the controller used last. Only the Vulkan renderer repaints the game's prompts.",
+ "options.triggers": "Triggers in .2T modes",
+ "options.triggers.stick": "Analog (side notes)",
+ "options.triggers.lr": "L/R (speed)",
+ "options.hint_triggers": "In 3.2T, 4.2T and 6.2T songs the left and right triggers play the side notes like the analog stick (the stick still works, and E and R do the same on the keyboard). L/R: the triggers are L and R, which change the speed, as in version 0.1. Everywhere else the triggers are L and R.",
+ "options.confirm.letter": "{btn} confirms",
+ "options.hint_confirm_letter": "{east} confirms in the Asian versions, {south} in the Western ones. In-game it only applies to menus, never to the lanes."
 }

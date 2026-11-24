@@ -111,7 +111,7 @@
  "options.fever": "Modo Fever",
  "options.fever.respect": "Respect (automático)",
  "options.fever.original": "Original (PSP)",
- "options.hint_fever": "Respect: o Fever começa sozinho quando a barra enche e a velocidade da pista continua a que você escolheu no Fever x4 ou mais. Original: o Fever começa com o botão X e a pista acelera a partir do x4, como no PSP. No modo Mission vale sempre o Original.",
+ "options.hint_fever": "Respect: o Fever começa sozinho quando a barra enche e a velocidade da pista continua a que você escolheu no Fever x4 ou mais. Original: o Fever começa com o botão {fever_btn} e a pista acelera a partir do x4, como no PSP. No modo Mission vale sempre o Original.",
  "options.score": "Sistema de pontuação",
  "options.score.respect": "Respect (0 a 1.000.000)",
  "options.score.original": "Original (PSP)",
@@ -156,5 +156,18 @@
  "texpack.no_vulkan": "Esta opção precisa de um driver gráfico Vulkan, e nenhum foi encontrado.",
  "texpack.no_net": "Não foi possível baixar as ferramentas (sem rede?): {error}",
  "texpack.unsupported": "Ainda indisponível nesta plataforma: as ferramentas de ampliação não têm versão para {arch}.",
- "texpack.not_ready": "Prepare o jogo primeiro."
+ "texpack.not_ready": "Prepare o jogo primeiro.",
+ "options.buttons": "Símbolos dos botões",
+ "options.buttons.auto": "Auto (último controle)",
+ "options.buttons.playstation": "PlayStation",
+ "options.buttons.xbox": "Xbox",
+ "options.buttons.steamdeck": "Steam Deck",
+ "options.buttons.switch": "Switch",
+ "options.hint_buttons": "As indicações de botão do jogo (OK, Cancel, Yes, No, ...) e este lançador mostram os botões do controle escolhido: Xbox (A B X Y coloridos), Steam Deck (A B X Y) ou Switch (B A Y X por posição). Auto segue o último controle usado. Só o renderizador Vulkan redesenha as indicações do jogo.",
+ "options.triggers": "Gatilhos nos modos .2T",
+ "options.triggers.stick": "Analógico (laterais)",
+ "options.triggers.lr": "L/R (velocidade)",
+ "options.hint_triggers": "Nas músicas 3.2T, 4.2T e 6.2T os gatilhos esquerdo e direito tocam as notas laterais como o analógico (o analógico continua valendo, e E e R fazem o mesmo no teclado). L/R: os gatilhos são L e R, que mudam a velocidade, como na versão 0.1. Em todo o resto os gatilhos são L e R.",
+ "options.confirm.letter": "{btn} confirma",
+ "options.hint_confirm_letter": "{east} confirma nas versões asiáticas e {south} nas ocidentais. No jogo vale só para menus, nunca para as teclas da pista."
 }
