@@ -103,6 +103,9 @@ EMOTIONALSENSE_SYNC_LOG=1 ./EmotionalSense-P3-0.1.0-linux-x86_64.AppImage --run
 | `EMOTIONALSENSE_TRACE_PAD` | logs every controller the window opens: name, SDL type, vendor:product and the button style it maps to | what Steam Input reports on a Deck |
 | `EMOTIONALSENSE_TRACE_SPEED` | logs the chart header and the judge's tempo at the song-start call sites | |
 | `EMOTIONALSENSE_SHOT_OVERLAY` | `1`: the captures (`EMOTIONALSENSE_SHOT`, `--capture`, F12) carry the host overlay (the speed label, the exit dialog) | a test aid; the window's compositor cannot be captured from a script |
+| `EMOTIONALSENSE_OVERLAY_SHOT=<file>` (+ `EMOTIONALSENSE_OVERLAY_SHOT_EVERY=N`) | the first overlaid frame is written to `<file>` (a `.ppm`); with `..._EVERY` one every N vblanks as `<file>.<vblank>.ppm` | a test aid (dialogs, labels) |
+| `EMOTIONALSENSE_WATCH_ALL` | with `EMOTIONALSENSE_WATCH_W=<addr>`: log every write to the address, not only those that change the value seen before the write | finds the writer of a byte the game also rewrites with the same value |
+| `EMOTIONALSENSE_TEX_DUMP_GLYPH=<dir>` | Vulkan: the button-rewritten textures (`<key>_m<map id>.png`), to compare texel for texel with the dump of the originals | a test aid (button styles, pills) |
 | `EMOTIONALSENSE_DEBUG_FB` | logs `SetFrameBuf` changes | |
 | `EMOTIONALSENSE_DEBUG_THREADS` | thread creation/end | |
 | `EMOTIONALSENSE_DEBUG_VPL` | VPL allocation failures | |

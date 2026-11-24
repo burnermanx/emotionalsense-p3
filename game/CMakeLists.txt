@@ -45,6 +45,7 @@ if(NOT MSVC)
         -Wl,--wrap=psp_func_0002D320
         -Wl,--wrap=psp_func_0002D618
         -Wl,--wrap=psp_func_0006D234
+        -Wl,--wrap=psp_func_00059AC4
         -Wl,--wrap=psp_func_00042064
         -Wl,--wrap=psp_func_000552C4
         -Wl,--build-id=sha1)

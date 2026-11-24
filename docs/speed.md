@@ -79,3 +79,17 @@ byte. Other options (the button style, the 2T triggers) do not change rules and 
 * The list's own click sound for R / L is the game's (it plays at each press, 0.1 steps included).
 * A chart whose first tempo cannot be read (outside 30..1000) keeps the game's speed and logs it.
 * Nothing in the records, rankings or unlocks reads the speed (the only readers are the lane code above).
+
+## The EFFECTOR menu and the shoulder buttons in play (round 36b)
+
+* The FreeStyle list's triangle opens the EFFECTOR slots (SPEED, then three effects). Its first slot is the same speed byte, but it is not the 0x30938 handler
+  of the list's L / R: the menu's handler (`0x31028` and the pieces after it) steps its cursor and asks `0x59AC4(menu, 0)` for the new index, then stores it with
+  `sb v0, 10($s6)` (`$s6` = `0x130E58`) at **`0x31300`** (Up; the call returns to `0x312F0`) and **`0x31198`** (Down; returns to `0x31188`). It is outside the
+  `0x17E90` / `0x17F04` hook, which only runs in a song. Found with `EMOTIONALSENSE_WATCH_W=0x130E62 EMOTIONALSENSE_WATCH_ALL=1` (every write, with the guest call chain
+  `0x2F240` <- `0x166FC` <- `0x13E54`; before, the watch only reported a write whose previous value differed from the previous report, which hid the effector's).
+* Respect wraps `0x59AC4` (`speed.c`): at those two return sites it takes a step of **0.1** (1.0 to 7.0, the same `g_v` as L / R, the list, the pause menu and the song) and returns the valid index
+  `floor(v / 5)` so the game stores that; the slot's badge (`0x2D618`, redrawn right after the store) and the header pill already show `AV x.y` through the list's overlay.
+  Original does not touch it (steps of 0.5). Measured: 3.5 -> 3.6 -> 3.7 -> 3.6 -> 3.5 on the badge and the pill, and the song that follows starts at the shared value.
+* R and L **in play** are the `0x17E90` / `0x17F04` hook of round 35 (callers `0x1FBF4` / `0x1FC90`); the value they leave is the shared one (`es_speed.json`, then the list, the pause menu and the
+  effector). Measured with R L R R L and then LT, RT: 4T and 6T: 5 steps for the shoulders (S+1, S, S+1, S+2, S+1) and 2 more for the triggers (they are L / R there); 3.2T and 4.2T with `triggers_2t=stick`:
+  5 steps, the triggers are the stick and change nothing; 6.2T: the 5 shoulder steps plus one step up from RT (the game's own handling of the pushed stick; LT did nothing).

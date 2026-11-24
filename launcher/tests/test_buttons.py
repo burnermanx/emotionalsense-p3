@@ -43,6 +43,18 @@ class Table(unittest.TestCase):
         for mode in ("circle", "cross"):  # the xbox colours follow the button, not the action
             self.assertEqual(b.action_face("xbox", "ok", mode)[2], b.XBOX_COLORS["A" if mode == "cross" else "B"])
 
+    def test_pills(self):
+        # START, SELECT, left, right shoulder per style; no dependence on the confirm option
+        want = {
+            "playstation": ("", "", "L1", "R1"),
+            "xbox": ("M", "V", "LB", "RB"),
+            "steamdeck": ("M", "V", "L1", "R1"),
+            "switch": ("+", "-", "L", "R"),
+        }
+        for style, labels in want.items():
+            self.assertEqual(tuple(b.pill(style, w) for w in b.PILLS), labels, style)
+        self.assertEqual(b.pill("auto", "left"), "L1")        # auto without a pad is PlayStation
+
     def test_resolve(self):
         self.assertEqual(b.resolve_style("xbox", "switch"), "xbox")
         self.assertEqual(b.resolve_style("auto", "switch"), "switch")

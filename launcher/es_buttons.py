@@ -78,3 +78,19 @@ def letter_of(style: str, position: str) -> str:
     """The name of a position's button for a text: the letter, or the PlayStation one."""
     letter, _ = face(style, position)
     return letter or {"cross": "X", "circle": "O", "square": "[]", "triangle": "/\\"}[position]
+
+
+# Button pills (round 36b): the same table as game/button_style.h `bs_pill_look`. "M" is the Menu icon (three
+# bars), "V" the View icon (two overlapping squares), "" keeps the original word. START, SELECT, left and right shoulder.
+PILLS = ("start", "select", "left", "right")
+_PILLS = {
+    "playstation": ("", "", "L1", "R1"),
+    "xbox": ("M", "V", "LB", "RB"),
+    "steamdeck": ("M", "V", "L1", "R1"),
+    "switch": ("+", "-", "L", "R"),
+}
+
+
+def pill(style: str, which: str) -> str:
+    """The label a button pill shows in a style (independent of the confirm option)."""
+    return _PILLS.get(style, _PILLS["playstation"])[PILLS.index(which)]

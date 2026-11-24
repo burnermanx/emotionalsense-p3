@@ -154,25 +154,74 @@ fresh_data() {   # prints a new data dir (disc/module linked, ms copied), the ca
     case $(cd "$d" && pwd -P) in */work/data) echo "refusing to run on work/data" >&2; return 1 ;; esac
     echo "$d"
 }
-# Buttons: 18 L from 2.5 (25 tenths) stop at 1.0 (three refused), 20 R give 3.0, 40 R reach 7.0, three more are refused.
+# Buttons: 18 L, 20 R, 40 R and 3 R from the start speed S (read from the log: the save in use may hold any speed): L stops at 1.0,
+# R at 7.0, and the refused presses are not steps. Wanted: min(18, S-1.0) down steps, then min(63, 7.0-low) up steps.
 check_speed_keys() {
     log=$(mktemp); sdata=$(fresh_data)
     EMOTIONALSENSE_SPEED=respect EMOTIONALSENSE_POKE="${J}+0x7FC:0x42C80000" \
     EMOTIONALSENSE_CONFIRM=circle EMOTIONALSENSE_SCRIPT="@$root/scripts/speed_keys.script" EMOTIONALSENSE_POLL=scene \
         SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=dummy \
         "$game" --data "$sdata" --frames 3400 --renderer null >/dev/null 2>"$log" || true
-    ok=1
-    [ "$(grep -c 'speed: down ->' "$log")" = 15 ] || ok=0                  # 25 -> 10, the other three refused
-    [ "$(grep -c 'speed: up ->' "$log")" = 60 ] || ok=0                    # 10 -> 70, the other three refused
-    grep -q 'speed: down -> 1.0 ' "$log" || ok=0
-    grep 'speed: up ->' "$log" | sed -n 20p | grep -q 'up -> 3.0 ' || ok=0 # the 20th R from 1.0
-    grep 'speed: up ->' "$log" | tail -1 | grep -q 'up -> 7.0 ' || ok=0
+    s=$(sed -n 's/.*start \([0-9]*\)\.\([0-9]\).*/\1\2/p' "$log" | head -1); ok=1; [ -n "$s" ] || { s=25; ok=0; }
+    nd=$(( s - 10 )); [ "$nd" -gt 18 ] && nd=18
+    low=$(( s - nd )); nu=$(( 70 - low )); [ "$nu" -gt 63 ] && nu=63
+    [ "$(grep -c 'speed: down ->' "$log")" = "$nd" ] || ok=0
+    [ "$(grep -c 'speed: up ->' "$log")" = "$nu" ] || ok=0
+    [ "$nd" -lt 1 ] || grep 'speed: down ->' "$log" | tail -1 | grep -q "down -> $(( (low) / 10 )).$(( low % 10 )) " || ok=0
+    t20=$(( low + 20 )); [ "$nu" -lt 20 ] || grep 'speed: up ->' "$log" | sed -n 20p | grep -q "up -> $(( t20 / 10 )).$(( t20 % 10 )) " || ok=0
+    top=$(( low + nu )); grep 'speed: up ->' "$log" | tail -1 | grep -q "up -> $(( top / 10 )).$(( top % 10 )) " || ok=0
     if grep -q 'down -> 0\.\|up -> 7\.[1-9]' "$log"; then ok=0; fi
-    if [ "$ok" != 1 ]; then echo "FAIL: speed buttons" >&2; grep 'speed:' "$log" | head -5 >&2; rm -rf "$log" "$sdata"; return 1; fi
+    if [ "$ok" != 1 ]; then echo "FAIL: speed buttons (start $s: wanted $nd down, $nu up)" >&2; grep 'speed:' "$log" | head -5 >&2; rm -rf "$log" "$sdata"; return 1; fi
     rm -rf "$log" "$sdata"
-    echo "OK: speed buttons: 15 L reach 1.0 and stop, 20 R from 1.0 give 3.0, R stops at 7.0"
+    echo "OK: speed buttons from $(( s / 10 )).$(( s % 10 )): $nd L steps (floor 1.0), $nu R steps (ceiling 7.0), the rest refused"
 }
 check_speed_keys
+
+# --- V4b / V4c (round 36b). The start value is read from the log ("speed: respect, start S"), not assumed: the save in use may hold any speed.
+tenths_of() { sed -n 's/.*start \([0-9]*\)\.\([0-9]\).*/\1\2/p' "$1" | head -1; }
+fmt_t() { echo "$(( $1 / 10 )).$(( $1 % 10 ))"; }
+# The EFFECTOR menu (the list's triangle): its SPEED slot steps by 0.1 in Respect (2 up, 2 down), the game's 0.5 stays in Original.
+check_effector() {
+    log=$(mktemp); sdata=$(fresh_data)
+    EMOTIONALSENSE_SPEED=respect EMOTIONALSENSE_CONFIRM=circle EMOTIONALSENSE_SCRIPT="@$root/scripts/effector_speed.script" \
+        SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=dummy "$game" --data "$sdata" --frames 2700 --renderer null >/dev/null 2>"$log" || true
+    s=$(tenths_of "$log"); ok=1
+    [ -n "$s" ] || ok=0
+    want="up -> $(fmt_t $((s + 1))) up -> $(fmt_t $((s + 2))) down -> $(fmt_t $((s + 1))) down -> $(fmt_t "$s")"
+    got=$(grep -o 'effector [a-z]* -> [0-9.]*' "$log" | sed 's/effector //' | tr '\n' ' ' | sed 's/ $//')
+    [ "$got" = "$(echo $want)" ] || ok=0
+    grep -q "the list set the game's index" "$log" && ok=0
+    rm -f "$log"
+    EMOTIONALSENSE_SPEED=original EMOTIONALSENSE_CONFIRM=circle EMOTIONALSENSE_SCRIPT="@$root/scripts/effector_speed.script" \
+        SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=dummy "$game" --data "$sdata" --frames 2700 --renderer null >/dev/null 2>"$log" || true
+    grep -q 'speed: effector' "$log" && ok=0
+    rm -rf "$log" "$sdata"
+    [ "$ok" = 1 ] || { echo "FAIL: effector speed (wanted: $want; got: $got)" >&2; return 1; }
+    echo "OK: effector: up, up, down, down = $want (start $(fmt_t "$s")); Original untouched"
+}
+check_effector
+# R and L (and LT / RT) during the song, in each of the five styles: the first five presses (R L R R L) give S+1 S S+1 S+2 S+1.
+# LT / RT: 4T and 6T are L / R (two more steps); with triggers_2t=stick they are the analog stick in 3.2T and 4.2T (no step).
+# The 6.2T stick-right gave one more step in the measurement (the game's own handling of the pushed stick): at least 5.
+check_speed_play() {   # style
+    log=$(mktemp); sdata=$(fresh_data)
+    EMOTIONALSENSE_SPEED=respect EMOTIONALSENSE_POKE="${J}+0x7FC:0x42C80000" EMOTIONALSENSE_CONFIRM=circle \
+    EMOTIONALSENSE_SCRIPT="@$root/scripts/speed_play_$1.script" SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=dummy \
+        "$game" --data "$sdata" --frames 3300 --renderer null >/dev/null 2>"$log" || true
+    s=$(tenths_of "$log"); ok=1; [ -n "$s" ] || ok=0
+    want="up -> $(fmt_t $((s + 1))) down -> $(fmt_t "$s") up -> $(fmt_t $((s + 1))) up -> $(fmt_t $((s + 2))) down -> $(fmt_t $((s + 1)))"
+    got=$(grep -o 'speed: \(up\|down\) -> [0-9.]*' "$log" | sed 's/speed: //' | head -5 | tr '\n' ' ' | sed 's/ $//')
+    [ "$got" = "$(echo $want)" ] || ok=0
+    n=$(grep -c 'speed: \(up\|down\) ->' "$log" || true)
+    case $1 in 4t|6t) [ "$n" = 7 ] || ok=0 ;; 32t|42t) [ "$n" = 5 ] || ok=0 ;; *) [ "$n" -ge 5 ] || ok=0 ;; esac
+    last=$(grep -o 'speed: \(up\|down\) -> [0-9]*\.[0-9]' "$log" | tail -1 | sed 's/.*-> //; s/\.//')
+    saved=$(sed -n 's/.*"tenths": \([0-9]*\).*/\1/p' "$sdata/es_speed.json" 2>/dev/null | head -1)
+    [ -n "$saved" ] && [ "$saved" = "$last" ] || ok=0    # the value of the last step is the shared one (list, pause, effector, next song)
+    rm -rf "$log" "$sdata"
+    [ "$ok" = 1 ] || { echo "FAIL: speed in play, $1 (wanted: $want; got: $got; $n steps, saved ${saved:-none} / last ${last:-none})" >&2; return 1; }
+    echo "OK: R/L in play, $1: $want, $n steps in all, saved $(fmt_t "$saved")"
+}
+for m in 4t 6t 32t 42t 62t; do check_speed_play $m; done
 
 # Scroll speed in the captured picture: the same Auto Velocity number gives the same speed on a 114 and a 196
 # BPM song (+-3 %: the captures are taken while the game runs, and under load the measure wandered between 0.99 and 1.02 in round 36, against 1.70 for Original); Original gives the PSP proportion (the tempo ratio, +-6 %: few lines are visible at a time). Needs the Vulkan renderer
@@ -286,13 +335,14 @@ check_speed_list() {
     log=$(mktemp); sdata=$(fresh_data)
     EMOTIONALSENSE_SPEED=respect EMOTIONALSENSE_CONFIRM=circle EMOTIONALSENSE_SCRIPT="@$root/scripts/speed_list.script" \
         SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=dummy "$game" --data "$sdata" --frames 2000 --renderer null >/dev/null 2>"$log" || true
-    ok=1
-    grep -q 'speed: list down -> 2.4' "$log" || ok=0
-    grep -q 'speed: list down -> 2.3' "$log" || ok=0
-    grep -q 'speed: song start, 2.3 ->' "$log" || ok=0
+    s=$(sed -n 's/.*start \([0-9]*\)\.\([0-9]\).*/\1\2/p' "$log" | head -1); ok=1; [ -n "$s" ] || { s=25; ok=0; }
+    a=$(( s - 1 )); b=$(( s - 2 ))
+    grep -q "speed: list down -> $(( a / 10 )).$(( a % 10 ))" "$log" || ok=0
+    grep -q "speed: list down -> $(( b / 10 )).$(( b % 10 ))" "$log" || ok=0
+    grep -q "speed: song start, $(( b / 10 )).$(( b % 10 )) ->" "$log" || ok=0
     rm -rf "$log" "$sdata"
-    [ "$ok" = 1 ] || { echo "FAIL: song list speed in tenths" >&2; return 1; }
-    echo "OK: song list: L twice = 2.3, the song starts at 2.3"
+    [ "$ok" = 1 ] || { echo "FAIL: song list speed in tenths (start $s)" >&2; return 1; }
+    echo "OK: song list: L twice from $(( s / 10 )).$(( s % 10 )) = $(( b / 10 )).$(( b % 10 )), the song starts at it"
 }
 check_speed_list
 

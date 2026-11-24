@@ -65,9 +65,9 @@ bs_look djmax_button_for_action(int confirm) {
 void djmax_buttons_tick(void) {
     const int style = djmax_button_effective_style();
     const int swap = djmax_swap_now();
-    const int id = (style == BS_PLAYSTATION && !swap) ? 0 : style * 2 + swap + 1;
+    /* never 0: even PlayStation rewrites the shoulder pills ("L1" / "R1") */
+    const int id = style * 2 + swap + 1;
     if (id == g_cur_id) return;
-    if (g_cur_id < 0 && id == 0) { g_cur_id = 0; return; }
     psp_glyph_map m;
     memset(&m, 0, sizeof m);
     m.id = (uint32_t)id;
@@ -77,7 +77,12 @@ void djmax_buttons_tick(void) {
         m.look[sym].shows = l.shows;
         m.look[sym].rgb = l.rgb;
     }
-    psp_render_set_glyph_map(id ? &m : NULL);
+    for (int w = 0; w < 4; w++) {                  /* the pills: START, SELECT, L, R (look 4..7) */
+        bs_pill p = bs_pill_look(style, w);
+        memcpy(m.look[4 + w].label, p.label, sizeof p.label);
+        m.look[4 + w].rgb = p.rgb;
+    }
+    psp_render_set_glyph_map(&m);
     psp_log("buttons: style %d, confirm swap %d (map %d)\n", style, swap, id);
     g_cur_id = id;
 }

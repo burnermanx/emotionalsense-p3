@@ -192,6 +192,15 @@ static const psp_glyph_rule k_glyph_rules[] = {
     { 0x92a108fbcd642f11ull, 128,  64, 109,  41, 18, 18, 't', 0 },
     { 0x3537fbb8378a7b0eull, 256, 256, 181, 146, 18, 18, 'x', 3 },
     { 0x3537fbb8378a7b0eull, 256, 256, 181, 206, 18, 18, 'o', 3 },
+    /* Button pills (round 36b): the text box inside each pill, sym S START, E SELECT, l / r shoulders. The pill's
+     * own shape and gradient stay; only the word is replaced (scripts/find_glyphs.py pills). */
+    { 0xa8fb042a8b1754dbull, 128,  32,   8,   4, 32,  7, 'E', 0 },  /* song list: SELECT Change Trax */
+    { 0x3ddbb8a994b8c554ull, 256, 256,  20,   5, 15,  9, 'l', 0 },  /* speed pill LB / RB: list header, pause menu */
+    { 0x3ddbb8a994b8c554ull, 256, 256, 138,   5, 15,  9, 'r', 0 },
+    { 0x48fb00810c9356e7ull, 256, 128,  19,   7, 15,  9, 'l', 0 },
+    { 0x48fb00810c9356e7ull, 256, 128, 137,   7, 15,  9, 'r', 0 },
+    { 0xbf62771857f976e0ull, 256, 128,  19,   7, 15,  9, 'l', 0 },
+    { 0xbf62771857f976e0ull, 256, 128, 137,   7, 15,  9, 'r', 0 },
 };
 #define GLYPH_RULES_N ((int)(sizeof k_glyph_rules / sizeof k_glyph_rules[0]))
 

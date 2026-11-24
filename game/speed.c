@@ -425,6 +425,29 @@ void __wrap_psp_func_0006D234(void)
         atomic_fetch_add(&g_list_press, ra == RA_LIST_R ? 1 : -1);
 }
 
+/* The EFFECTOR menu (the list's triangle; round 36b): its first slot is the same speed. The handler (0x31028 and the
+ * pieces after it) steps the cursor and asks 0x59AC4(menu, 0) for the new index, then stores it with `sb v0, 10($s6)`
+ * into 0x130E62: Up returns to 0x312F0, Down to 0x31188. Like the list's L / R, Respect takes a step of 0.1 there and
+ * hands the game the valid index of the new speed instead of its own +-1 (0.5). The slot's badge is the list's badge
+ * (0x2D618, redrawn right after the store), so the overlay of the list already labels it "AV x.y". */
+#define RA_EFF_UP   0x000312F0u
+#define RA_EFF_DOWN 0x00031188u
+void __real_psp_func_00059AC4(void);
+void __wrap_psp_func_00059AC4(void)
+{
+    uint32_t ra = psp_cpu.r[PSP_REG_RA];
+    __real_psp_func_00059AC4();
+    if ((ra != RA_EFF_UP && ra != RA_EFF_DOWN) || !active() || psp_scene_now() != 2) return;
+    lazy_init();
+    int nv = g_v + (ra == RA_EFF_UP ? 1 : -1);
+    nv = nv < MIN_T ? MIN_T : nv > MAX_T ? MAX_T : nv;
+    psp_log("speed: effector %s -> %d.%d\n", ra == RA_EFF_UP ? "up" : "down", nv / 10, nv % 10);
+    if (nv != g_v) changed(psp_display_vblanks());
+    g_v = nv;
+    g_last_byte = (uint8_t)idx_of(g_v);       /* the store that follows is the valid index: nothing for the tick to fix */
+    psp_cpu.r[PSP_REG_V0] = g_last_byte;
+}
+
 /* The window's overlay, V4. Coordinates are the 480x272 frame's, scaled by s = w / 480. */
 /* the patch (inclusive), the two clean columns to blend between, and a signature: two pixels of the sprite's own
  * edge (x1, x2 at row sy) that must be at least smin bright, else the sprite is not on screen */

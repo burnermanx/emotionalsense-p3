@@ -2,6 +2,7 @@
  * letter (or symbol) of the physical button that runs its action. 5 styles x 2 confirmations. */
 #include "../button_style.h"
 #include <stdio.h>
+#include <string.h>
 
 static int fails;
 #define CHECK(c, ...) do { if (!(c)) { fails++; printf("FAIL: " __VA_ARGS__); printf("\n"); } } while (0)
@@ -31,6 +32,22 @@ int main(void) {
     CHECK(bs_resolve(BS_XBOX, 0, 1).rgb == 0xE8453C, "B is red");
     /* the auto style (0) is the PlayStation one */
     CHECK(bs_resolve(BS_AUTO, 0, 0).shows == 'x', "auto = playstation");
+    /* the pills: START, SELECT, left and right shoulder, per style (round 36b) */
+    static const char *const wp[5][4] = {
+        /* playstation */ { "", "", "L1", "R1" },
+        /* xbox        */ { "M", "V", "LB", "RB" },
+        /* steamdeck   */ { "M", "V", "L1", "R1" },
+        /* switch      */ { "+", "-", "L", "R" },
+        /* auto        */ { "", "", "L1", "R1" },
+    };
+    for (int style = BS_AUTO; style <= BS_SWITCH; style++)
+        for (int which = 0; which < 4; which++) {
+            bs_pill p = bs_pill_look(style, which);
+            const char *w = wp[style == BS_AUTO ? 4 : style - 1][which];
+            n++;
+            CHECK(!strcmp(p.label, w), "style %d pill %d: '%s' wanted '%s'", style, which, p.label, w);
+            CHECK(p.rgb == ((which < 2 && w[0]) ? 0xFFFFFFu : 0u), "style %d pill %d colour %06X", style, which, p.rgb);
+        }
     printf("button style table: %d combinations checked, %d failures\n", n, fails);
     return fails ? 1 : 0;
 }

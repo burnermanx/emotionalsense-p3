@@ -27,16 +27,25 @@ build the rest from your own disc.
 - **Speed in tenths in the song list and the pause menu** (Respect): R and L in the list step by 0.1, and the list's header
   pill, its "SPEED" badge and the pause menu's pill show `AV 2.3` (the host paints over the digits of the game's sprites, which
   only have art for .0 and .5). The save keeps receiving only what the game writes (byte-identical `SD.BIN` for the same inputs).
+  The EFFECTOR menu (the list's triangle) steps its SPEED slot by 0.1 as well, with the same shared value; R / L during the song
+  were already steps of 0.1 in every style (4T, 6T, 3.2T, 4.2T, 6.2T).
 - **Button symbols** (`button_style`: auto, playstation, xbox, steamdeck, switch; `EMOTIONALSENSE_BUTTONS`, `--buttons`, launcher
   row): the game's button prompts and the launcher's footer and hints show the buttons of the chosen pad (Xbox letters coloured,
   Steam Deck white, Switch positional B A Y X), composed with the confirm button. `auto` follows the controller used last
   (`SDL_GameControllerGetType`, the Steam Deck by its ids or `SteamDeck=1`; Windows/XInput is Xbox). Face buttons are read by
   position on every pad (`SDL_GAMECONTROLLER_USE_BUTTON_LABELS=0`). Vulkan only (`docs/buttons.md`).
+  The pills the game draws for the buttons follow the style too, whatever the confirm button: SELECT is the View icon (two
+  overlapping squares) on Xbox and Steam Deck and a minus on Switch, and the shoulder pills read L1 / R1 (PlayStation and
+  Steam Deck), LB / RB (Xbox) or L / R (Switch); the icons and letters are drawn by code (PlayStation keeps the word SELECT).
+  START has no pill in any screen reached, so the Menu icon / plus are only in the table.
 - **Triggers in the .2T modes** (`triggers_2t`: stick (default) or lr; `EMOTIONALSENSE_TRIGGERS_2T`, `--triggers-2t`, launcher row):
   LT / RT are the analog stick's left / right in 3.2T, 4.2T and 6.2T songs; the keyboard's E / R always are. `lr` is the 0.1 behaviour.
 
 ### Changed
 
+- The title screen's exit dialog looks like the game's own boxes: an opaque black panel with a thin gold outline, the question in
+  white with wide spacing, YES / NO in condensed bold capitals with the chosen one on an orange bar, nothing dimmed and no button hints
+  (drawn by code at any internal scale and on the software renderer; the texts are rasterised by `scripts/gen_exit_text.py`).
 - The launcher's option hint area shows three lines.
 - Development version is now `0.2.0-dev` (`--version`, the launcher, the kit manifest);
   `scripts/release.sh` drops the suffix when a release is prepared.

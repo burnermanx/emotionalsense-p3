@@ -20,13 +20,13 @@
 #include <psprecomp/mem.h>
 #include <psprecomp/window.h>
 
+#include <math.h>
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "exit_text.h"
-#include "button_style.h"
 #include "psprecomp/log.h"
 
 #define PAD_UP     0x0010u
@@ -45,7 +45,7 @@
 static atomic_int g_open;       /* dialog visible */
 static atomic_int g_sel;        /* 0 yes, 1 no */
 static int g_lang;
-static int g_confirm_cross;     /* the confirm icon: circle (0) or cross (1) */
+static int g_confirm_cross;     /* confirm with cross (the keys of the dialog do not depend on it) */
 static int g_enabled = 1;
 
 void es_exit_set_confirm_cross(int cross) { g_confirm_cross = cross != 0; }
@@ -214,62 +214,62 @@ uint32_t es_exit_filter(uint32_t btns) {
 }
 
 /* ---- drawing -------------------------------------------------------------- */
+/* The look of the game's own "Return to game title?" box: an opaque black panel with rounded corners and a thin
+ * gold-to-orange outline, the question in white with wide spacing, YES and NO in condensed bold capitals side by
+ * side, the chosen one on an orange bar. Shapes from distance functions, texts from the masks of exit_text.c; all in
+ * 480x272 units times the scale s (the overlay also runs on the software renderer's frame). The rest of the frame is
+ * not dimmed and the panel has no button hints (the game's box has none). */
 
-static void fill(uint32_t *px, int w, int h, int x, int y, int rw, int rh, uint32_t col) {
-    unsigned a = col >> 24;
-    for (int j = y < 0 ? 0 : y; j < y + rh && j < h; j++)
-        for (int i = x < 0 ? 0 : x; i < x + rw && i < w; i++) {
-            uint32_t *d = &px[j * w + i];
-            if (a == 255) { *d = col; continue; }
-            uint32_t o = *d;
-            uint32_t r = ((col & 255) * a + (o & 255) * (255 - a)) / 255;
-            uint32_t g = (((col >> 8) & 255) * a + ((o >> 8) & 255) * (255 - a)) / 255;
-            uint32_t b = (((col >> 16) & 255) * a + ((o >> 16) & 255) * (255 - a)) / 255;
-            *d = 0xFF000000u | (b << 16) | (g << 8) | r;
+static float clampf(float v, float lo, float hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+static void put(uint32_t *px, int w, int x, int y, float r, float g, float b, float a) {
+    if (a <= 0.0f) return;
+    if (a > 1.0f) a = 1.0f;
+    uint32_t o = px[y * w + x];
+    float orr = (float)(o & 255), og = (float)((o >> 8) & 255), ob = (float)((o >> 16) & 255);
+    px[y * w + x] = 0xFF000000u | ((uint32_t)(b * a + ob * (1 - a) + 0.5f) << 16) |
+                    ((uint32_t)(g * a + og * (1 - a) + 0.5f) << 8) | (uint32_t)(r * a + orr * (1 - a) + 0.5f);
+}
+
+/* signed distance to a rounded rectangle centred at the origin (half sizes hx, hy, corner radius r) */
+static float sd_rrect(float x, float y, float hx, float hy, float r) {
+    float qx = fabsf(x) - (hx - r), qy = fabsf(y) - (hy - r);
+    float ox = qx > 0 ? qx : 0, oy = qy > 0 ? qy : 0;
+    float in = qx > qy ? qx : qy;
+    return sqrtf(ox * ox + oy * oy) + (in < 0 ? in : 0) - r;
+}
+
+static float mask_at(const es_exit_text *t, float u, float v) {   /* bilinear, u / v in mask pixels */
+    u -= 0.5f; v -= 0.5f;
+    int x0 = (int)floorf(u), y0 = (int)floorf(v);
+    float fx = u - (float)x0, fy = v - (float)y0, sum = 0;
+    for (int j = 0; j < 2; j++)
+        for (int i = 0; i < 2; i++) {
+            int x = x0 + i, y = y0 + j;
+            float c = (x >= 0 && y >= 0 && x < t->w && y < t->h) ? (float)t->a[y * t->w + x] / 255.0f : 0.0f;
+            sum += c * (i ? fx : 1 - fx) * (j ? fy : 1 - fy);
         }
+    return sum;
 }
 
-static void text(uint32_t *px, int w, int h, const es_exit_text *t, int x, int y, int s, uint32_t col) {
-    int rowb = (t->w + 7) / 8;
-    for (int j = 0; j < t->h; j++)
-        for (int i = 0; i < t->w; i++)
-            if (t->bits[j * rowb + i / 8] & (0x80 >> (i % 8)))
-                fill(px, w, h, x + i * s, y + j * s, s, s, col);
-}
-
-/* A ring (circle button) or a cross, 14 units wide, drawn from primitives. */
-/* The confirm and cancel icons follow the button style (buttons.c): a 5x7 letter on the button. */
-bs_look djmax_button_for_action(int confirm);   /* buttons.c */
-static void letter_icon(uint32_t *px, int w, int h, int x, int y, int s, char L, uint32_t rgb) {
-    static const char *const G[4][7] = {
-        { "01110", "10001", "10001", "11111", "10001", "10001", "10001" },   /* A */
-        { "11110", "10001", "10001", "11110", "10001", "10001", "11110" },   /* B */
-        { "10001", "10001", "01010", "00100", "01010", "10001", "10001" },   /* X */
-        { "10001", "10001", "01010", "00100", "00100", "00100", "00100" },   /* Y */
-    };
-    const char *const *g = G[L == 'A' ? 0 : L == 'B' ? 1 : L == 'x' ? 2 : 3];
-    const uint32_t col = 0xFF000000u | ((rgb & 0xFF) << 16) | (rgb & 0xFF00u) | ((rgb >> 16) & 0xFF);
-    fill(px, w, h, x, y, 14 * s, 14 * s, 0xFF101010u);
-    for (int j = 0; j < 7; j++)
-        for (int i = 0; i < 5; i++)
-            if (g[j][i] == '1') fill(px, w, h, x + (2 + 2 * i) * s, y + 2 * j * s, 2 * s, 2 * s, col);
-}
-static void icon(uint32_t *px, int w, int h, int x, int y, int s, int cross, uint32_t col) {
-    const bs_look l = djmax_button_for_action((cross != 0) == (g_confirm_cross != 0));
-    if (l.letter) { letter_icon(px, w, h, x, y, s, l.letter, l.rgb); return; }
-    cross = l.shows == 'x';
-    const int n = 14;
-    for (int j = 0; j < n; j++)
-        for (int i = 0; i < n; i++) {
-            int on;
-            if (cross) {
-                on = (abs(i - j) <= 1) || (abs(i - (n - 1 - j)) <= 1);
-            } else {
-                int dx = 2 * i - (n - 1), dy = 2 * j - (n - 1);
-                int d2 = dx * dx + dy * dy;
-                on = d2 <= (n - 1) * (n - 1) && d2 >= (n - 5) * (n - 5);
-            }
-            if (on) fill(px, w, h, x + i * s, y + j * s, s, s, col);
+/* the text centred on (cx, cy) in pixels, `alpha` of its colour; 2 / s mask pixels per destination pixel */
+static void draw_text(uint32_t *px, int w, int h, const es_exit_text *t, float cx, float cy, int s, unsigned rgb, float alpha) {
+    const float k = 2.0f / (float)s;                         /* mask pixels per destination pixel */
+    const float tw = (float)t->w / k, th = (float)t->h / k;
+    const int x0 = (int)(cx - tw * 0.5f) - 1, y0 = (int)(cy - th * 0.5f) - 1;
+    const int sub = s >= 2 ? 1 : 2;                          /* at 1x two taps per axis: the mask is 2x */
+    for (int y = y0; y < y0 + (int)th + 3; y++)
+        for (int x = x0; x < x0 + (int)tw + 3; x++) {
+            if (x < 0 || y < 0 || x >= w || y >= h) continue;
+            float c = 0;
+            for (int j = 0; j < sub; j++)
+                for (int i = 0; i < sub; i++) {
+                    float u = ((float)x + ((float)i + 0.5f) / (float)sub - (cx - tw * 0.5f)) * k;
+                    float v = ((float)y + ((float)j + 0.5f) / (float)sub - (cy - th * 0.5f)) * k;
+                    c += mask_at(t, u, v);
+                }
+            c /= (float)(sub * sub);
+            put(px, w, x, y, (float)(rgb >> 16 & 255), (float)(rgb >> 8 & 255), (float)(rgb & 255), c * alpha);
         }
 }
 
@@ -279,30 +279,45 @@ int es_exit_overlay(uint32_t *px, int w, int h) {
     int s = w / 480;
     if (s < 1) s = 1;
     const es_exit_text *tx = es_exit_texts[g_lang];
-    int sel = atomic_load(&g_sel);
-    /* dim the whole frame, then a box in the middle (all in 480x272 units * s) */
-    fill(px, w, h, 0, 0, w, h, 0x90000000u);
-    int bw = 300, bh = 110;
-    int bx = (w - bw * s) / 2, by = (h - bh * s) / 2;
-    fill(px, w, h, bx - 2 * s, by - 2 * s, (bw + 4) * s, (bh + 4) * s, 0xFFE8E8E8u);
-    fill(px, w, h, bx, by, bw * s, bh * s, 0xF0201810u);
-    text(px, w, h, &tx[0], bx + (bw * s - tx[0].w * s) / 2, by + 14 * s, s, 0xFFFFFFFFu);
+    const int sel = atomic_load(&g_sel);
+    const float S = (float)s;
+    /* panel: 452 x 140 units, centred; outline 2 units */
+    const float pw = 452.0f * S, ph = 140.0f * S, pcx = (float)w * 0.5f, pcy = (float)h * 0.5f;
+    const float rr = 6.0f * S, ow = 2.0f * S;
+    const int x0 = (int)(pcx - pw * 0.5f) - 2, x1 = (int)(pcx + pw * 0.5f) + 2;
+    const int y0 = (int)(pcy - ph * 0.5f) - 2, y1 = (int)(pcy + ph * 0.5f) + 2;
+    for (int y = y0 < 0 ? 0 : y0; y < y1 && y < h; y++)
+        for (int x = x0 < 0 ? 0 : x0; x < x1 && x < w; x++) {
+            float d = sd_rrect((float)x + 0.5f - pcx, (float)y + 0.5f - pcy, pw * 0.5f, ph * 0.5f, rr);
+            float cover = clampf(0.5f - d, 0.0f, 1.0f);                 /* inside the outer edge */
+            if (cover <= 0.0f) continue;
+            float inner = clampf(0.5f - (d + ow), 0.0f, 1.0f);          /* inside the outline: black */
+            float t = clampf(((float)y - (pcy - ph * 0.5f)) / ph, 0.0f, 1.0f);   /* gold at the top, orange at the bottom */
+            float gr = 255.0f, gg = 214.0f - 70.0f * t, gb = 70.0f - 70.0f * t;
+            float r = gr * (1 - inner), g = gg * (1 - inner), b = gb * (1 - inner);
+            put(px, w, x, y, r, g, b, cover);
+        }
+    /* the question, white, in the upper part */
+    draw_text(px, w, h, &tx[0], pcx, pcy - ph * 0.5f + 56.6f * S, s, 0xFFFFFF, 1.0f);
+    /* YES and NO: bars 90 x 25 units, 49 units either side of the centre */
     for (int k = 0; k < 2; k++) {
-        const es_exit_text *o = &tx[1 + k];
-        int cx = bx + (k == 0 ? bw / 4 : 3 * bw / 4) * s;
-        int ox = cx - (o->w * s) / 2, oy = by + 62 * s;
-        int pw = (o->w + 36) * s;
+        const float cx = pcx + (k == 0 ? -49.0f : 49.0f) * S, cy = pcy - ph * 0.5f + 111.5f * S;
         if (sel == k) {
-            fill(px, w, h, cx - pw / 2, oy - 6 * s, pw, (o->h + 12) * s, 0xFF2090E0u);
-            text(px, w, h, o, ox, oy, s, 0xFF000000u);
+            const float bw = 90.0f * S, bh = 25.0f * S;
+            for (int y = (int)(cy - bh * 0.5f); y < (int)(cy + bh * 0.5f); y++)
+                for (int x = (int)(cx - bw * 0.5f); x < (int)(cx + bw * 0.5f); x++) {
+                    if (x < 0 || y < 0 || x >= w || y >= h) continue;
+                    float u = ((float)x + 0.5f - (cx - bw * 0.5f)) / bw;      /* 0..1 along the bar */
+                    float fade = clampf((u - 0.74f) / 0.26f, 0.0f, 1.0f);    /* the right end darkens to brown */
+                    float edge = clampf((0.05f - u) / 0.05f, 0.0f, 1.0f) * 0.35f;
+                    float m = fade * fade * (3 - 2 * fade);
+                    put(px, w, x, y, 255.0f - 145.0f * m - 60.0f * edge, 154.0f - 70.0f * m - 40.0f * edge, 0.0f, 1.0f);
+                }
+            draw_text(px, w, h, &tx[1 + k], cx, cy, s, 0xFFFFFF, 1.0f);
         } else {
-            fill(px, w, h, cx - pw / 2, oy - 6 * s, pw, (o->h + 12) * s, 0x60808080u);
-            text(px, w, h, o, ox, oy, s, 0xFFE0E0E0u);
+            draw_text(px, w, h, &tx[1 + k], cx, cy, s, 0x808080, 1.0f);
         }
     }
-    /* what the buttons do: confirm icon = pick, cancel icon = No */
-    icon(px, w, h, bx + 8 * s, by + (bh - 20) * s, s, g_confirm_cross, 0xFFC8C8C8u);
-    icon(px, w, h, bx + (bw - 22) * s, by + (bh - 20) * s, s, !g_confirm_cross, 0xFF9A9A9Au);
     return 1;
 }
 

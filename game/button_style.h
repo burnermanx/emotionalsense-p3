@@ -38,4 +38,30 @@ static inline bs_look bs_resolve(int style, int swap, int sym) {
     return r;
 }
 
+
+/* Button pills (round 36b): the pills the game draws for START, SELECT and the shoulder buttons.
+ * which: 0 START, 1 SELECT, 2 left shoulder, 3 right shoulder. Returns the label the renderer draws
+ * ("M" the Menu icon, "V" the View icon, "+", "-", or text) and its colour (0xFFFFFF for the icons,
+ * 0 = the dark of the game's own shoulder text); "" keeps the game's pill as it is (PlayStation's
+ * START and SELECT). Independent of the confirm-with-cross swap. */
+typedef struct { char label[4]; uint32_t rgb; } bs_pill;
+static inline bs_pill bs_pill_look(int style, int which) {
+    bs_pill r = { "", 0 };
+    static const char *const XB[4] = { "M", "V", "LB", "RB" };
+    static const char *const SD[4] = { "M", "V", "L1", "R1" };
+    static const char *const SW[4] = { "+", "-", "L", "R" };
+    static const char *const PS[4] = { "", "", "L1", "R1" };
+    const char *t;
+    if (which < 0 || which > 3) return r;
+    switch (style) {
+    case BS_XBOX: t = XB[which]; break;
+    case BS_STEAMDECK: t = SD[which]; break;
+    case BS_SWITCH: t = SW[which]; break;
+    default: t = PS[which]; break;              /* playstation and auto */
+    }
+    for (int i = 0; t[i] && i < 3; i++) r.label[i] = t[i];
+    r.rgb = which < 2 && t[0] ? 0xFFFFFF : 0;
+    return r;
+}
+
 #endif
