@@ -24,6 +24,10 @@ build the rest from your own disc.
 - **MISSION always plays Original**: in the mission mode the Fever, scoring and speed options do not apply (the
   missions are written for the PSP rules); no Respect record is written for a mission.
 - `EMOTIONALSENSE_SHOT_OVERLAY=1` puts the host overlay into captures (test aid).
+- **AppImage updates**: the AppImages carry their update information
+  (`gh-releases-zsync|burnermanx|emotionalsense-p3|latest|EmotionalSense-P3-*-<target>.AppImage.zsync`) and each
+  release publishes the `.zsync` next to them, so AppImageUpdate and similar tools (Gear Lever, AppImageLauncher)
+  can update an AppImage in place, downloading only what changed. Takes effect from the first release built with it.
 
 ### Changed
 

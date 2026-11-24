@@ -6,7 +6,10 @@
 1. launcher/assets/build_assets.py   (fonts subset, theme PNGs)
 2. PyInstaller --onedir              (EmotionalSense / EmotionalSense.exe)
 3. the kit goes next to the executable as `kit/`, the licences as `licenses/`
-4. --appimage (Linux): wraps the onedir in an AppImage with appimagetool.
+4. --appimage (Linux): wraps the onedir in an AppImage with appimagetool. The AppImage carries
+   its update information (gh-releases-zsync, the latest GitHub release of this project) and
+   appimagetool writes the .zsync file next to it; publish both, so AppImageUpdate and similar
+   tools can update it. --update-info "" leaves it out (a local or forked build).
 5. --archive: EmotionalSense-P3-<version>-<target>.tar.gz (Linux) or .zip (Windows) of the onedir.
 
 Targets: linux-x86_64, linux-aarch64, windows-x86_64, windows-arm64. PyInstaller does not
@@ -27,6 +30,14 @@ ROOT = Path(__file__).resolve().parent.parent
 L = ROOT / "launcher"
 NAME = "EmotionalSense-P3"           # onedir folder and launcher executable (.exe on Windows)
 DISPLAY = "EmotionalSense-P3"        # the product name users see
+REPO = ("burnermanx", "emotionalsense-p3")
+
+
+def update_info(target: str) -> str:
+    """AppImage update information: the .zsync of this target in the latest GitHub release
+    (https://docs.appimage.org/packaging-guide/optional/updates.html). The version is a wildcard,
+    so an AppImage of 0.1.1 finds the one of 0.2.0."""
+    return f"gh-releases-zsync|{REPO[0]}|{REPO[1]}|latest|{DISPLAY}-*-{target}.AppImage.zsync"
 
 
 def project_version() -> str:
@@ -56,6 +67,8 @@ def main() -> int:
     ap.add_argument("--appimage", action="store_true")
     ap.add_argument("--archive", action="store_true", help="also write the .tar.gz (Linux) / .zip (Windows)")
     ap.add_argument("--appimagetool", type=Path)
+    ap.add_argument("--update-info", help="AppImage update information (default: this project's latest "
+                    "GitHub release, gh-releases-zsync); an empty string leaves it out")
     ap.add_argument("--cache", type=Path, default=L / "assets" / ".cache")
     a = ap.parse_args()
     out = a.out.resolve()
@@ -113,11 +126,19 @@ def main() -> int:
         tool = a.appimagetool or Path(shutil.which("appimagetool") or "")
         if not tool or not tool.exists():
             sys.exit("appimagetool not found (--appimagetool)")
+        tool = tool.resolve()                      # it runs in `out`, below
         arch = a.target.split("-", 1)[1]
         img = out / f"{DISPLAY}-{project_version()}-{a.target}.AppImage"
         env = dict(os.environ, ARCH=arch, APPIMAGE_EXTRACT_AND_RUN="1")
-        sh(tool, "--no-appstream", appdir, img, env=env)
+        info = update_info(a.target) if a.update_info is None else a.update_info
+        # run in `out`: appimagetool writes the .zsync into its current folder
+        sh(tool, "--no-appstream", *(["-u", info] if info else []), appdir, img, env=env, cwd=out)
         print(f"AppImage: {img} ({img.stat().st_size >> 20} MiB)")
+        if info:
+            zs = img.with_name(img.name + ".zsync")
+            if not zs.exists():
+                sys.exit(f"appimagetool wrote no {zs.name} (it needs its bundled zsyncmake)")
+            print(f"zsync: {zs}")
     if a.archive:
         import tarfile
         import zipfile
