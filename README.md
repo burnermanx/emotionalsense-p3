@@ -2,6 +2,8 @@
 
 [![ci](https://github.com/burnermanx/emotionalsense-p3/actions/workflows/ci.yml/badge.svg)](https://github.com/burnermanx/emotionalsense-p3/actions/workflows/ci.yml)
 
+<a href="https://recomplauncher.com"><picture><source media="(prefers-color-scheme: dark)" srcset="https://recomplauncher.com/assets/press/launcher/badge-light.svg"><img alt="Get it on RecompLauncher" src="https://recomplauncher.com/assets/press/launcher/badge-dark.svg" height="48"></picture></a>
+
 > **DJMAX Portable 3** (PSP, 2010 -- `ULKS46236`) statically recompiled to a native
 > game for Linux and Windows (x86-64 and arm64) that a small launcher builds on
 > your own computer from your own disc. Built on
