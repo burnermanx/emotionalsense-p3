@@ -48,7 +48,9 @@ build the rest from your own disc.
   all of it available from the start (the game decides "new" from the player's level and the rows of its unlock table, not
   from the unlock bits). With the unlock on those windows are not opened; the level-up window and the item-box reveal stay,
   and so does the special-mission notice (missions are not part of the unlock). With `EMOTIONALSENSE_UNLOCK=0` the game's notices
-  appear as before (`EMOTIONALSENSE_UNLOCK_ITEMS=0` keeps the item notices). `SD.BIN` is written exactly as before
+  appear as before (`EMOTIONALSENSE_UNLOCK_ITEMS=0` keeps the item notices). The "You have acquired a new HD / SS pattern"
+  window of the first play of a chart is skipped too (the unlock already had the pattern). The special-mission notice stays: the
+  game raises it only for a mission that song just unlocked, so it is not shown once every mission is unlocked. `SD.BIN` is written exactly as before
   (`docs/unlock-table.md`).
 - The 2T triggers in `stick` mode no longer depend on the song player's flag, only on the gameplay scene and the style byte.
 - The title screen's exit dialog looks like the game's own boxes: an opaque black panel with a thin gold outline, the question in

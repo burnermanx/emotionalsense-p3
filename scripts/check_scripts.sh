@@ -380,6 +380,41 @@ check_unlock_notices() {
 }
 check_unlock_notices
 
+# --- U1b (round 36d): "You have acquired a new HD / SS pattern" on the FIRST play of a chart (the play mark of (song, style, diff 1) is 0).
+# The route plays song 18 (4T); the song has no such chart, so the test gives it one (poke of the chart-level byte 0x138E38 + 61 * song + 40
+# + 3 * style + 1, memory only) and clears its play mark (poke "<": before the gameplay scene only; record 0x130EC8 + 150 * song + 10 *
+# diff, the halfword XOR 0xB07F). Message 0x16 opens from 0x430DC: skipped with the unlock on, shown with UNLOCK=0 and with
+# SHOW_NOTICES=1, and the SD.BIN of the skipped and the shown run is the same.
+# The special mission's notice (0x12) needs no skip: the game only raises it for a mission THIS song unlocked (0x5C190 skips every
+# mission whose bit in the word 0x134A30, XOR the key 0x9D321C55, is set), so with all 30 missions unlocked there is no window at all.
+check_first_play_notice() {
+    d1=$(fresh_data); d2=$(fresh_data); d3=$(fresh_data); d4=$(fresh_data); l1=$(mktemp); l2=$(mktemp); l3=$(mktemp); l4=$(mktemp)
+    allm=$(printf '0x%X' $(( 0x3FFFFFFF ^ 0x9D321C55 )))
+    run_first() {   # datadir log extra-poke env
+        env $4 EMOTIONALSENSE_TRACE_MSG=1 EMOTIONALSENSE_POKE="0x1392AB:3:1,<0x13195E:0xB07F:2,$3${J}+0x7FC:0x42C80000,${J}+0x560*+0x10:0x7f:1" \
+        EMOTIONALSENSE_POLL=scene EMOTIONALSENSE_CONFIRM=circle EMOTIONALSENSE_SCRIPT="@$root/scripts/unlock_notices.script" \
+            SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=dummy "$game" --data "$1" --frames 9800 --renderer null >/dev/null 2>"$2" || true
+    }
+    run_first "$d1" "$l1" "" EMOTIONALSENSE_UNLOCK=1 &
+    run_first "$d2" "$l2" "" EMOTIONALSENSE_SHOW_NOTICES=1 &
+    run_first "$d3" "$l3" "" EMOTIONALSENSE_UNLOCK=0 &
+    run_first "$d4" "$l4" "<0x134A30:$allm," EMOTIONALSENSE_UNLOCK=1 &
+    wait
+    ok=1
+    grep -q "msg: .* id=0x16 .* skipped" "$l1" || ok=0
+    grep -q "msg: .* id=0x16 .* shown" "$l2" || ok=0
+    grep -q "msg: .* id=0x16 .* shown" "$l3" || ok=0
+    grep -q "msg: .* id=0x12 .* shown" "$l1" || ok=0               # a locked mission unlocked by this song: the notice stays
+    ! grep -q "msg: .* id=0x12 " "$l4" || ok=0                     # every mission already unlocked: the game raises no notice
+    grep 'poll\[' "$l1" | grep -A1 '0x0805E874 = 0x0000000A' | grep -q '0x0805E874 = 0x00000002' || ok=0
+    sd1=$(md5sum "$d1"/ms/PSP/SAVEDATA/*/SD.BIN | cut -d' ' -f1); sd2=$(md5sum "$d2"/ms/PSP/SAVEDATA/*/SD.BIN | cut -d' ' -f1)
+    [ "$sd1" = "$sd2" ] || ok=0
+    if [ "$ok" != 1 ]; then echo "FAIL: first-play pattern notice (SD.BIN $sd1 / $sd2)" >&2; grep -h 'msg:' "$l1" "$l2" "$l3" "$l4" >&2; rm -rf "$d1" "$d2" "$d3" "$d4" "$l1" "$l2" "$l3" "$l4"; return 1; fi
+    rm -rf "$d1" "$d2" "$d3" "$d4" "$l1" "$l2" "$l3" "$l4"
+    echo "OK: first-play pattern notice skipped with the unlock on, shown with it off; locked mission notice kept, none with all missions unlocked; SD.BIN identical"
+}
+check_first_play_notice
+
 # --- B: button style. The PLAY MODE SELECT footer (No / Yes) is repainted: Xbox letters are green (A) and red (B); the PlayStation
 # footer has no such colours. Needs PIL and Vulkan (skipped otherwise).
 if python3 -c "import PIL" 2>/dev/null && [ "${ES_CHECK_NO_VULKAN:-0}" != 1 ]; then

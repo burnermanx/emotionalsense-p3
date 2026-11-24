@@ -289,8 +289,9 @@ The notices are message windows opened through `0x163C(manager, message id, 1, 0
 | `0x413A8` | by item type, from `0x404C0` (`0xC` for a crew member) | the box's item: "You have acquired a new character / SS pattern ..." | the level up picks three items (`0x41B2C`), the chosen one is announced; no ownership test |
 | `0x4321C`, `0x4326C` | by item type | the unlock table's rows (halfwords `+272`, `+274` of the result object) | `0x435F0` / `0x43830` walk 71 / 5 rows of a text table in the game's data (`level, item, ...`, split at commas); level >= the row's level and the owned bit (bitmap `0x1349A4`, `0x53F34`) clear |
 | `0x413FC`, `0x4142C` | `0x1D`, `0x1E` | "3.2 Trax unlocked" (level 2), "4.2T unlocked" (level 5) | `0x547F0` (the player level) equals 2 / 5 |
-| `0x43028` | `0x12` | "You have qualified a Special Mission" | `0x5C190` (the mission module), flag `+83` set by `0x43CD4` |
-| `0x430D8`/`0x430FC`, `0x43178`, `0x431A8`, `0x431D8` | `0x16`/`0x17`, `0x10`, `0x20`, `0x11` | chart / pattern unlocks of the song just played (flags `+84..+87`) | set by `0x427B8` / `0x435F0` from the chart-state and the owned-bit tests; never opened in the runs below |
+| `0x43028` | `0x12` | "You have qualified a Special Mission" | `0x5C190` (the mission module) walks the 30 missions and skips every one whose bit is set in the word `0x134A30` (XOR the key at `0x138E34`, `0x9D321C55` here; `0x540C0` is the test); a mission whose condition holds now gets its bit set and the flag `+83` is raised by `0x43CD4` |
+| `0x430DC`, `0x430FC` | `0x16`, `0x17` | "You have acquired a new HD pattern. <song>" (style 4T/6T) / "... a new SS pattern. <song>" (the 2T styles) | **the first play of a chart**: `0x55EF4(table 0x138E38, song, style, 1)` says the chart exists (level byte `0x138E38 + 61 * song + 40 + 3 * style + diff` non-zero) and `0x54EF4(0x130EC8, song, style, 1)` says its play mark is 0 (the 2 low bits of the record's first halfword, XOR `0xB07F`, record `0x130EC8 + 150 * song + 30 * style + 10 * diff`); `0x427B8` raises `+84` and `0x55068` writes the mark. The id is by `0x56BF4` (the style byte, `< 2` -> `0x16`). It does not depend on the level and not on the unlock |
+| `0x43178`, `0x431A8`, `0x431D8` | `0x10`, `0x20`, `0x11` | flags `+85`, `+86`, `+87` | `+85`: `0x5A2D8(type 5, ...)` (gallery item) not owned; `+86`: the chart state (`0x551C4`, the 2 high bits of byte 9) is 0; `+87`: a row of the level table whose item is not owned. All three read bits the unlock sets, so they do not appear with everything unlocked; not skipped, and never seen opening |
 
 Why the forced unlock produced notices: the unlock sets every owned bit from the first frame, but the game never compares
 "before" and "after" for the box item or for the level-keyed rows' modes: it announces whatever the level up picked and
@@ -298,11 +299,13 @@ the `3.2T` / `4.2T` message whenever the new level is exactly 2 or 5. The measur
 experience just below the next level, poked before the gameplay scene, then a 1,000,000-point song) gave: level up, boxes,
 reveal, "new character" (id `0xC`), special mission (`0x12`); at level 1 -> 2 also `0x1D`.
 
-Fix (`__wrap_psp_func_0000163C` in `game/guest_patches.c`, scene 4 only): with the unlock on, the windows at `0x413FC` and
-`0x4142C` are not opened; with the unlock *and* the item unlock on, those at `0x413A8`, `0x4321C` and `0x4326C` are not
+Fix (`__wrap_psp_func_0000163C` in `game/guest_patches.c`, scene 4 only): with the unlock on, the windows at `0x413FC`, `0x4142C`
+(modes) and `0x430DC`, `0x430FC` (the first-play pattern notice, round 36d: a chart is not "new" when the unlock had it) are not opened; with the unlock *and* the item unlock on, those at `0x413A8`, `0x4321C` and `0x4326C` are not
 opened either. The state machine goes on by itself (it waits for the window's busy flag, and a window never opened is not
 busy), so no extra press is needed. The level-up window and the box reveal are not at these call sites and stay. The special
-mission is not part of the unlock (missions are not touched by it), so its notice stays. The save is written as before:
+mission is not part of the unlock (missions are not touched by it), so its notice stays -- and it needs no skip: it is raised only for a mission this very song unlocked, so with all 30
+missions already unlocked (word `0x134A30` XOR key = `0x3FFFFFFF`, poked on a copy) no window is opened at all, while with a
+locked mission it is `shown` (`check_first_play_notice`). The save is written as before:
 the byte-for-byte comparison of `SD.BIN` between a run with and a run without the skip (`EMOTIONALSENSE_SHOW_NOTICES=1`)
 is equal. `EMOTIONALSENSE_TRACE_MSG=1` logs every window opened (vblank, id, call site, shown or skipped).
 Route: `scripts/unlock_notices.script`, check `check_unlock_notices` in `scripts/check_scripts.sh` (it needs the
@@ -330,3 +333,9 @@ male-role cheats.
 The gallery/video/gear/icon codes are **no longer used**: the item bitmap replaced
 the CWCheat, which had the same `-0x4000` error and possibly the same code-type
 error.
+
+The first-play notice is reproduced with `scripts/unlock_notices.script` after two memory pokes on a copy (the route's song 18 has no
+diff-1 chart, so the level byte `0x1392AB` is given a value, and its play mark is cleared before the gameplay scene: `<0x13195E:0xB07F:2`):
+`0x16` opens at `0x430DC` with the song's name, is `skipped` with the unlock on and `shown` with `EMOTIONALSENSE_UNLOCK=0` or
+`EMOTIONALSENSE_SHOW_NOTICES=1`; the `SD.BIN` of both runs is identical. `EMOTIONALSENSE_MSG_PROBE=<id>` makes the mission
+window open with another message id (how the texts of `0x16` / `0x17` were read).
