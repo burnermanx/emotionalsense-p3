@@ -196,6 +196,13 @@ int djmax_playing(void)
     return g_song_player && psp_read8(g_song_player + PLAYER_FLAG) != 0;
 }
 
+/* 1 while a song has been started and is not running: PAUSE, GAME OVER, the mission's failed menu. Not before the
+ * song starts (g_song_player is 0 until then) and not after the result (the scene changes). */
+int djmax_song_paused(void)
+{
+    return SCENE_WORD == SCENE_PLAY && g_song_player && psp_read8(g_song_player + PLAYER_FLAG) == 0;
+}
+
 /* ---- Fever, "Respect" mode ------------------------------------------------
  *
  * How the game's Fever works (found in round 27, see docs/fever.md). The judge

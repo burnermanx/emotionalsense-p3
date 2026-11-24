@@ -46,13 +46,25 @@ The game's own tempo scaling stays, so the AV 2.0 of a 200 BPM song and of a 100
   save and the Original mode never see anything odd. `0x1DF44` is not called: the label takes its place.
 * The Fever with Original Fever mode adds **+0.5** on top of `v` at x4 and x5 and the end of the Fever takes back exactly that
   (refused above 7.0, like the game at 7.0). With Fever Respect the Fever's steps are skipped as before.
-* The list: R / L (and a style change) set the game's index as ever (steps of 0.5, the list shows the game's number); the host takes it as
-  the new `v` and keeps the byte valid (a list R at 1.0 -> 0.5 is put back to 1.0 a vblank later). In play the exact value shows in the label.
+* The list (round 36): R and L step `v` by **0.1**. The game's own handler (`0x30938`) still runs (its sound, its 0.5 step of the index);
+  the host sees the press through the button test `0x6D234` (wrapped; only the list's two return sites `0x30DF0` = L and `0x30EA4` = R count),
+  and a tick later takes the step of 0.1 instead and writes back the valid index `floor(v / 5)`. A style change (SELECT) reloads the
+  saved index of that style: the host takes it as the new `v` (index x 0.5). In play the exact value shows in the label.
+* Where the game draws the speed outside the song (round 36): the header pill "LB [X 2.5] RB" (`0x2D320`, updated on entry and on a press, frame
+  `32 + index`), the badge "SPEED 2.5" at the bottom left (`0x2D618`) and the pause menu's pill (`0x265E0`, same pill art). The art has a frame per
+  .0 / .5 only, so the overlay (`es_speed_ui_overlay`) paints over the digits and draws the speed in tenths: it blends, row by row, the
+  pixels at two clean columns beside the digits (nothing of the art is stored), and writes `AV 2.3` in the pill (the pill's box is as wide as
+  its text, so its bounds are found on its bright top edge), `AV` over the badge's caption and `2.3` over its digits. Rectangles (480x272 units):
+  list pill digits x 377..410 around the box's middle, y 15..27 (top edge row 15, bounds searched from x 391); badge digits x 11..38, y 214..229,
+  caption x 12..38, y 205..211; pause pill y 141..153 (top edge row 141, searched from x 134). Each patch checks the sprite's own edge pixels first,
+  so nothing is drawn where the sprite is not on screen. The list sprites are only redrawn on entry and on a press, so they count as visible from the
+  first update after the list is entered until the scene changes; the pause pill counts as visible 20 vblanks after the song's sound player
+  stopped (`djmax_song_paused`: a started song whose flag is 0: pause, game over, the mission's failed menu).
 * `<data>/es_speed.json` (`{"tenths": 23}`) remembers `v` between songs and sessions; without it `v` is the game's index x 0.5 (at
   least 1.0). Written atomically when the value changed (list: next vblank; play: half a second after the last press) and at the end of a run.
 * The label `AV 2.3` is drawn by the host over the presented frame (`es_speed_overlay`, glyphs rasterised from Noto Sans CJK Bold, nothing of
   the game's art), at the rectangle and for the time of the game's sprite; it scales with the window and `--internal-scale`.
-  `EMOTIONALSENSE_SHOT_OVERLAY=1` puts it into the captures. The pause menu and the list still show the game's own speed (the index byte).
+  `EMOTIONALSENSE_SHOT_OVERLAY=1` puts it into the captures (also with the software renderer: the overlay is drawn by the window).
 
 ## MISSION always plays Original
 
@@ -60,10 +72,10 @@ The game's own tempo scaling stays, so the AV 2.0 of a 200 BPM song and of a 100
 is entered. Writers: `0x273B4` (style select, 0), `0x279C4` (FREE STYLE, 1), `0x3B400` (the mission list, 2). In a mission: the host does not
 force the auto-fever flag nor skip the Fever's speed steps, the speed wraps pass through (the game's index, 0.5x..7.0x, the game's sprite),
 the result screen shows the game's score and no Respect record is written. Back out of a mission, the Respect speed `v` is put back into the
-byte. Other options (the button style, the 2T triggers of later rounds) do not change rules and stay.
+byte. Other options (the button style, the 2T triggers) do not change rules and stay.
 
 ## Not covered
 
-* The song list's and the pause menu's speed numbers are the game's index (steps of 0.5).
+* The list's own click sound for R / L is the game's (it plays at each press, 0.1 steps included).
 * A chart whose first tempo cannot be read (outside 30..1000) keeps the game's speed and logs it.
 * Nothing in the records, rankings or unlocks reads the speed (the only readers are the lane code above).

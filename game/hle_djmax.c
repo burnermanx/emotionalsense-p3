@@ -156,28 +156,54 @@ static int swap_outside_play(void) { return !djmax_playing(); }
 
 /* Cross confirms (and circle cancels) in menus. The game hardcodes the
  * opposite, so the buttons are swapped on the sceCtrl value, never in play. */
-/* The button prompts the game draws ("OK", "Cancel", YES/NO) are glyph sprites
- * inside UI atlases. Each rule is a texture (dump key and size) and the
- * rectangles of its circle and cross discs. Numbers only: the images are never
- * stored, the renderer rewrites its own uploaded copy while the swap is on.
- * Found by template matching over a dump of every screen. */
+/* The button prompts the game draws ("OK", "Cancel", YES/NO, the song list's SP.Mission, the
+ * studio's effector, ...) are glyph sprites inside UI atlases. Each rule is a texture (dump key
+ * and size), the square of one disc and the symbol it shows. Numbers only: the images are never
+ * stored, the renderer rewrites its own uploaded copy for the button style and the confirm
+ * button (buttons.c). Found by template matching over a dump of every route in scripts/dump
+ * (scripts/find_glyphs.py). rot = quarter turns the texture is stored turned (letters only): 3 for the two textures whose text is stored turned a quarter CCW (Yes / No in the title
+ * dialog, the rotated "No" of the option screen), judged from the stored text; no capture of those two screens was reached. */
 static const psp_glyph_rule k_glyph_rules[] = {
-    /* key                 w    h    ax   ay   bx   by   gw  gh  kind */
-    { 0x0fba947c8ba1f2b9ull, 512, 256, 379, 146, 320, 146, 18, 18, 'S' },  /* PLAY MODE SELECT */
-    { 0x3e86e26d5d754018ull, 128, 128,   1,  75,  22,  75, 18, 18, 'S' },  /* menu glyph strip */
-    { 0x43176e9e394d6759ull, 512, 256, 445, 233,   0,   0, 18, 19, 'X' },  /* RESULT "OK" */
-    { 0x665bed80d6445bb0ull, 256, 256, 207,  27, 143,  27, 18, 18, 'S' },  /* "Cancel / OK" bar */
-    { 0x66d76c818fc78d8aull, 256, 256, 230,  87, 230, 147, 18, 18, 'S' },  /* Yes / No */
-    { 0x6df8e6862296785dull, 128,  64,  21,  45,   1,  45, 18, 18, 'S' },  /* YES NO / CANCEL OK */
-    { 0x93b1446194f40cc3ull, 256, 256, 128,  38,  68,  38, 18, 18, 'S' },  /* song list: Cancel / OK */
+    /* key                 w    h    x    y   gw  gh  sym  rot */
+    { 0x0fba947c8ba1f2b9ull, 512, 256, 379, 146, 18, 18, 'o', 0 },  /* PLAY MODE SELECT */
+    { 0x0fba947c8ba1f2b9ull, 512, 256, 320, 146, 18, 18, 'x', 0 },
+    { 0x3e86e26d5d754018ull, 128, 128,   1,  75, 18, 18, 'o', 0 },  /* menu glyph strip */
+    { 0x3e86e26d5d754018ull, 128, 128,  22,  75, 18, 18, 'x', 0 },
+    { 0x3e86e26d5d754018ull, 128, 128,  43,  75, 18, 18, 's', 0 },
+    { 0x3e86e26d5d754018ull, 128, 128,  64,  75, 18, 18, 't', 0 },
+    { 0x43176e9e394d6759ull, 512, 256, 445, 233, 18, 19, 'o', 0 },  /* RESULT "OK" */
+    { 0x665bed80d6445bb0ull, 256, 256, 207,  27, 18, 18, 'o', 0 },  /* "Cancel / OK" bar */
+    { 0x665bed80d6445bb0ull, 256, 256, 143,  27, 18, 18, 'x', 0 },
+    { 0x66d76c818fc78d8aull, 256, 256, 230,  87, 18, 18, 'o', 3 },  /* Yes / No */
+    { 0x66d76c818fc78d8aull, 256, 256, 230, 147, 18, 18, 'x', 3 },
+    { 0x6df8e6862296785dull, 128,  64,  21,  45, 18, 18, 'o', 0 },  /* YES NO / CANCEL OK */
+    { 0x6df8e6862296785dull, 128,  64,   1,  45, 18, 18, 'x', 0 },
+    { 0x93b1446194f40cc3ull, 256, 256, 128,  38, 18, 18, 'o', 0 },  /* song list: Studio / Cancel / OK / Effector */
+    { 0x93b1446194f40cc3ull, 256, 256,  68,  38, 18, 18, 'x', 0 },
+    { 0x93b1446194f40cc3ull, 256, 256,   2,  38, 18, 18, 's', 0 },
+    { 0x93b1446194f40cc3ull, 256, 256,   2,  77, 18, 18, 't', 0 },
+    { 0x838fa5df9271e5a5ull, 256, 256,   1,  40, 18, 18, 'x', 0 },  /* Cancel / OK / SP.Mission */
+    { 0x838fa5df9271e5a5ull, 256, 256,  61,  40, 18, 18, 'o', 0 },
+    { 0x838fa5df9271e5a5ull, 256, 256, 172,  40, 18, 18, 's', 0 },
+    { 0x838fa5df9271e5a5ull, 256, 256,   2,  63, 18, 18, 't', 0 },
+    { 0x838fa5df9271e5a5ull, 256, 256,  80,  63, 18, 18, 't', 0 },
+    { 0x92a108fbcd642f11ull, 128,  64, 109,   1, 18, 18, 'x', 0 },  /* a column of three */
+    { 0x92a108fbcd642f11ull, 128,  64, 109,  21, 18, 18, 'o', 0 },
+    { 0x92a108fbcd642f11ull, 128,  64, 109,  41, 18, 18, 't', 0 },
+    { 0x3537fbb8378a7b0eull, 256, 256, 181, 146, 18, 18, 'x', 3 },
+    { 0x3537fbb8378a7b0eull, 256, 256, 181, 206, 18, 18, 'o', 3 },
 };
+#define GLYPH_RULES_N ((int)(sizeof k_glyph_rules / sizeof k_glyph_rules[0]))
 
 void djmax_set_confirm_cross(int cross) {
     g_confirm_cross = cross != 0;
-    psp_render_set_glyph_rules(g_confirm_cross ? k_glyph_rules : NULL,
-                               g_confirm_cross ? (int)(sizeof k_glyph_rules / sizeof k_glyph_rules[0]) : 0);
     psp_ctrl_set_face_swap(g_confirm_cross, swap_outside_play);
 }
+int djmax_confirm_cross(void) { return g_confirm_cross; }
+/* 1 while the swap applies right now (a menu): the prompts then show the other symbol. */
+int djmax_swap_now(void) { return g_confirm_cross && !djmax_playing(); }
+/* The rules are always installed; buttons.c decides, per vblank, which look they get. */
+void djmax_install_glyph_rules(void) { psp_render_set_glyph_rules(k_glyph_rules, GLYPH_RULES_N); }
 
 /* ---- sceUtility ---------------------------------------------------------- */
 

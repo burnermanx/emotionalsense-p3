@@ -167,26 +167,45 @@ class Ui:
         """circle or cross, from the option (auto follows the language)."""
         return self.es_main.resolve_confirm(self.cfg.get("confirm", "auto"), es_i18n.language())
 
+    pad_style = None       # style of the controller that pressed last (set by the window, es_pad.Pad.kind)
+
+    def button_style(self) -> str:
+        """playstation | xbox | steamdeck | switch: the option, or (auto) the last controller used."""
+        import es_buttons
+        return es_buttons.resolve_style(str(self.cfg.get("button_style", "auto")), self.pad_style)
+
+    def button_name(self, position: str) -> str:
+        import es_buttons
+        return es_buttons.letter_of(self.button_style(), position)
+
     def _footer(self, img, back=True, ok=True, move=True):
+        import es_buttons
         d = ImageDraw.Draw(img)
         x = 56
         y = H - 40
         label = lambda s: self.text(s, 17, th.WHITE)  # noqa: E731
-        cross_ok = self.confirm_mode() == "cross"      # ✕ confirms, ○ goes back
+        style = self.button_style()
+        mode = self.confirm_mode()
 
-        def circle(x):
-            d.ellipse([x, y, x + 20, y + 20], outline=th.WHITE, width=3)
-
-        def cross(x):
-            d.line([x + 2, y + 2, x + 18, y + 18], fill=th.WHITE, width=3)
-            d.line([x + 18, y + 2, x + 2, y + 18], fill=th.WHITE, width=3)
+        def glyph(x, action):
+            # the symbol or letter of the button that runs this action (confirm option composed in)
+            pos, letter, col = es_buttons.action_face(style, action, mode)
+            if letter:
+                d.ellipse([x, y, x + 20, y + 20], fill=(16, 16, 16), outline=(70, 70, 70))
+                im = self.text(letter, 16, tuple(col), kind="title", slant=0.0)
+                img.alpha_composite(im, (x + 10 - im.width // 2, y + 10 - im.height // 2))
+            elif pos == "circle":
+                d.ellipse([x, y, x + 20, y + 20], outline=th.WHITE, width=3)
+            else:
+                d.line([x + 2, y + 2, x + 18, y + 18], fill=th.WHITE, width=3)
+                d.line([x + 18, y + 2, x + 2, y + 18], fill=th.WHITE, width=3)
         if ok:
-            (cross if cross_ok else circle)(x)
+            glyph(x, "ok")
             im = label(t("nav.ok") + "  Enter")
             img.alpha_composite(im, (x + 28, y - 3))
             x += 28 + im.width + 26
         if back:
-            (circle if cross_ok else cross)(x)
+            glyph(x, "back")
             im = label(t("nav.back") + "  Esc")
             img.alpha_composite(im, (x + 28, y - 3))
             x += 28 + im.width + 26
@@ -309,12 +328,14 @@ class Ui:
             ("unlock", t("options.unlock"), on(c["unlock"])),
             ("unlock_items", t("options.items"), on(c["unlock_items"])),
             ("key_trim", t("options.key_trim"), t("options.auto") if c["key_trim"] == "default" else str(c["key_trim"])),
-            ("confirm", t("options.confirm"), t("options.confirm." + c.get("confirm", "auto"))),
+            ("confirm", t("options.confirm"), self.confirm_label()),
+            ("button_style", t("options.buttons"), t("options.buttons." + str(c.get("button_style", "auto")))),
             ("start_mode", t("options.startmode"), t("options.startmode." + str(c.get("start_mode", "last")))),
             ("refresh", t("options.refresh"), t("options.refresh." + str(c.get("refresh", "native")))),
             ("fever", t("options.fever"), t("options.fever." + str(c.get("fever", "respect")))),
             ("score", t("options.score"), t("options.score." + str(c.get("score", "respect")))),
             ("speed", t("options.speed"), t("options.speed." + str(c.get("speed", "respect")))),
+            ("triggers_2t", t("options.triggers"), t("options.triggers." + str(c.get("triggers_2t", "stick")))),
             ("bga_smooth", t("options.bga"), t("options.bga." + str(c.get("bga_smooth", "0")))),
             ("update", t("options.update"), self.update_label()),
             ("renderer", t("options.renderer"), t("options.auto") if c["renderer"] == "auto" else c["renderer"]),
@@ -323,6 +344,18 @@ class Ui:
         if self._tp().ENABLED:                        # experimental, hidden unless ES_TEXPACK_PROTO=1
             rows.insert(5, ("texpack", t("options.texpack"), self.texpack_label()))
         return rows
+
+    def confirm_label(self) -> str:
+        """The confirm row: "Circle confirms" in the PlayStation style, the letter of that button in the others."""
+        v = self.cfg.get("confirm", "auto")
+        if v == "auto" or self.button_style() == "playstation":
+            return t("options.confirm." + v)
+        return t("options.confirm.letter", btn=self.button_name(self.confirm_mode()))
+
+    def confirm_hint(self) -> str:
+        if self.button_style() == "playstation":
+            return t("options.hint_confirm")
+        return t("options.hint_confirm_letter", east=self.button_name("circle"), south=self.button_name("cross"))
 
     def texpack_label(self) -> str:
         import es_texpack
@@ -363,9 +396,11 @@ class Ui:
                     d.polygon([(710, y + 4), (710, y + 20), (722, y + 12)], fill=th.WHITE)
         key = rows[self.sel["options"]][0]
         hint = (t("options.hint_unlock") if key in ("unlock", "unlock_items")
-                else t("options.hint_confirm") if key == "confirm"
+                else self.confirm_hint() if key == "confirm"
                 else t("options.hint_refresh") if key == "refresh"
-                else t("options.hint_fever") if key == "fever"
+                else t("options.hint_fever", fever_btn=self.button_name("cross")) if key == "fever"
+                else t("options.hint_buttons") if key == "button_style"
+                else t("options.hint_triggers") if key == "triggers_2t"
                 else t("options.hint_score") if key == "score"
                 else t("options.hint_speed") if key == "speed"
                 else t("options.hint_startmode") if key == "start_mode"
@@ -550,6 +585,11 @@ class Ui:
             c["score"] = cyc(list(self.es_main.SCORE_VALUES), str(c.get("score", "respect")))
         elif key == "speed":
             c["speed"] = cyc(list(self.es_main.SPEED_VALUES), str(c.get("speed", "respect")))
+        elif key == "button_style":
+            c["button_style"] = cyc(list(self.es_main.BUTTON_STYLE_VALUES), str(c.get("button_style", "auto")))
+            host.set_confirm(self.confirm_mode())
+        elif key == "triggers_2t":
+            c["triggers_2t"] = cyc(list(self.es_main.TRIGGERS_2T_VALUES), str(c.get("triggers_2t", "stick")))
         elif key == "start_mode":
             c["start_mode"] = cyc(list(self.es_main.START_MODE_VALUES), str(c.get("start_mode", "last")))
         elif key == "bga_smooth":
@@ -706,6 +746,9 @@ class App:
 
     def pad_tick(self):
         keys = self.pad.poll()
+        if self.pad.kind != self.ui.pad_style:         # `auto` button style follows the last controller used
+            self.ui.pad_style = self.pad.kind
+            self.ui.dirty = True
         # While the game runs the pad belongs to it: the same presses must not
         # also drive (and re-launch from) the hidden launcher.
         if not self.ui.running and not self.modal:

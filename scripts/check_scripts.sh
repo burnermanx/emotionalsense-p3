@@ -175,7 +175,7 @@ check_speed_keys() {
 check_speed_keys
 
 # Scroll speed in the captured picture: the same Auto Velocity number gives the same speed on a 114 and a 196
-# BPM song (+-1 %); Original gives the PSP proportion (the tempo ratio, +-6 %: few lines are visible at a time). Needs the Vulkan renderer
+# BPM song (+-3 %: the captures are taken while the game runs, and under load the measure wandered between 0.99 and 1.02 in round 36, against 1.70 for Original); Original gives the PSP proportion (the tempo ratio, +-6 %: few lines are visible at a time). Needs the Vulkan renderer
 # and python3 with PIL; skipped (and said so) when either is missing.
 measure_song() {   # script mode -> prints "px_per_vblank tempo"
     sdata=$(fresh_data); log=$(mktemp); shots=$(mktemp -d)
@@ -185,7 +185,7 @@ measure_song() {   # script mode -> prints "px_per_vblank tempo"
         "$game" --data "$sdata" --frames 3300 --renderer vulkan >/dev/null 2>"$log" || true
     s3=$(grep '0x0805E874 = 0x00000003' "$log" | head -1 | sed 's/poll\[\([0-9]*\)\].*/\1/')
     tempo=$(grep -o 'chart tempo [0-9.]*' "$log" | head -1 | sed 's/chart tempo //')
-    a=$((s3 + 500)); b=$((a + 398))
+    a=$((s3 + 500)); b=$((a + 698))
     list=$(python3 -c "print(','.join(str(x) for x in range($a, $b + 1, 2)))")
     EMOTIONALSENSE_SCRIPT="@$root/scripts/$1.script" EMOTIONALSENSE_SHOT="$list" EMOTIONALSENSE_SHOT_DIR="$shots" \
         "$game" --data "$sdata" --frames $((b + 5)) --renderer vulkan --internal-scale 2 >/dev/null 2>"$log" || true
@@ -207,9 +207,9 @@ if min(ra, rb, oa, ob, ta, tb) <= 0:
 r = rb / ra; o = ob / oa; want = tb / ta
 print("   respect: %.4f vs %.4f px/vblank (B/A %.4f, tempo %g / %g); original: %.4f vs %.4f (B/A %.3f, tempo ratio %.3f)"
       % (ra, rb, r, ta, tb, oa, ob, o, want))
-sys.exit(0 if abs(r - 1) <= 0.01 and abs(o / want - 1) <= 0.06 else 1)
+sys.exit(0 if abs(r - 1) <= 0.03 and abs(o / want - 1) <= 0.06 else 1)
 PY
-    then echo "OK: speed: Respect keeps the scroll speed across songs (+-1 %), Original keeps the PSP's tempo proportion"
+    then echo "OK: speed: Respect keeps the scroll speed across songs (+-3 %), Original keeps the PSP's tempo proportion"
     else echo "FAIL: speed in px/s" >&2; exit 1; fi
 else
     echo "SKIP: speed in px/s (needs python3 with PIL and a Vulkan renderer)"
@@ -238,3 +238,92 @@ check_mission() {
     echo "OK: mission with Respect options: Fever waited for CROSS (gauge full at vblank $full, started $run), game's speed, no record"
 }
 check_mission
+
+# --- 2T triggers (T, round 36). The style byte (options struct 0x130E58 +5: 0 4T, 1 6T, 2 3.2T, 3 4.2T, 4 6.2T) holds in the song; 4.2T
+# gets LT/RT (and E/R) hammered with no lane button, and the judge's weight sum (judge+0x814) tells whether the side notes were hit:
+# triggers_2t=stick must beat lr by far (lr: LT/RT are L/R, the speed buttons). In 4T a trigger is L/R whatever the option says.
+check_style_byte() {
+    log=$(mktemp); sdata=$(fresh_data)
+    EMOTIONALSENSE_POLL="scene,0x130E5D:b" EMOTIONALSENSE_CONFIRM=circle EMOTIONALSENSE_SCRIPT="@$root/scripts/mode_62t.script" \
+        SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=dummy "$game" --data "$sdata" --frames 2000 --renderer null >/dev/null 2>"$log" || true
+    ok=1; grep -q '0x00130E5D = 0x00000004' "$log" || ok=0
+    s3=$(grep '0x0805E874 = 0x00000003' "$log" | head -1 | sed 's/poll\[\([0-9]*\)\].*/\1/')
+    sb=$(grep '0x00130E5D = 0x00000004' "$log" | head -1 | sed 's/poll\[\([0-9]*\)\].*/\1/')
+    [ -n "$s3" ] && [ -n "$sb" ] && [ "$sb" -le "$s3" ] || ok=0
+    rm -rf "$log" "$sdata"
+    if [ "$ok" != 1 ]; then echo "FAIL: style byte 0x130E5D in 6.2T" >&2; return 1; fi
+    echo "OK: style byte 0x130E5D = 4 (6.2T) before the song starts"
+}
+check_style_byte
+weight_of() {   # script option [pokes-extra]: prints the judge's weight sum at the end of the run
+    log=$(mktemp); sdata=$(fresh_data)
+    EMOTIONALSENSE_TRIGGERS_2T=$2 EMOTIONALSENSE_POKE="${J}+0x7FC:0x42C80000,${J}+0x560*+0x10:0x7f:1" \
+    EMOTIONALSENSE_POLL="${J}+0x814" EMOTIONALSENSE_CONFIRM=circle EMOTIONALSENSE_SCRIPT="@$root/scripts/$1.script" \
+        SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=dummy "$game" --data "$sdata" --frames 3300 --renderer null >/dev/null 2>"$log" || true
+    v=$(grep 'poll\[' "$log" | tail -1 | sed 's/.*= 0x\([0-9A-Fa-f]*\) .*/\1/')
+    rm -rf "$log" "$sdata"
+    echo $(( 0x${v:-0} ))
+}
+w_stick=$(weight_of triggers_2t stick); w_lr=$(weight_of triggers_2t lr); w_keys=$(weight_of triggers_2t_keys lr)
+if [ "$w_stick" -gt $((w_lr + 60)) ] && [ "$w_keys" -gt $((w_lr + 60)) ]; then
+    echo "OK: 4.2T side notes: LT/RT as the stick judged weight $w_stick, as L/R $w_lr; E/R keys $w_keys"
+else echo "FAIL: 2T triggers (stick $w_stick, lr $w_lr, E/R $w_keys)" >&2; exit 1; fi
+check_trigger_4t() {   # a trigger is L/R in 4T: the speed changes (15 steps from 2.5 down to 1.0, then refused)
+    log=$(mktemp); sdata=$(fresh_data)
+    EMOTIONALSENSE_TRIGGERS_2T=$1 EMOTIONALSENSE_POKE="${J}+0x7FC:0x42C80000" EMOTIONALSENSE_CONFIRM=circle \
+    EMOTIONALSENSE_SCRIPT="@$root/scripts/triggers_4t.script" SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=dummy \
+        "$game" --data "$sdata" --frames 2300 --renderer null >/dev/null 2>"$log" || true
+    n=$(grep -c 'speed: down ->' "$log" || true)
+    rm -rf "$log" "$sdata"
+    [ "$n" -ge 10 ] || { echo "FAIL: LT in 4T with triggers_2t=$1 changed the speed $n times" >&2; return 1; }
+    echo "OK: LT in 4T (triggers_2t=$1) is L: $n speed steps"
+}
+check_trigger_4t stick
+check_trigger_4t lr
+
+# --- V4: the song list steps in tenths and the song starts at the chosen value.
+check_speed_list() {
+    log=$(mktemp); sdata=$(fresh_data)
+    EMOTIONALSENSE_SPEED=respect EMOTIONALSENSE_CONFIRM=circle EMOTIONALSENSE_SCRIPT="@$root/scripts/speed_list.script" \
+        SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=dummy "$game" --data "$sdata" --frames 2000 --renderer null >/dev/null 2>"$log" || true
+    ok=1
+    grep -q 'speed: list down -> 2.4' "$log" || ok=0
+    grep -q 'speed: list down -> 2.3' "$log" || ok=0
+    grep -q 'speed: song start, 2.3 ->' "$log" || ok=0
+    rm -rf "$log" "$sdata"
+    [ "$ok" = 1 ] || { echo "FAIL: song list speed in tenths" >&2; return 1; }
+    echo "OK: song list: L twice = 2.3, the song starts at 2.3"
+}
+check_speed_list
+
+# --- B: button style. The PLAY MODE SELECT footer (No / Yes) is repainted: Xbox letters are green (A) and red (B); the PlayStation
+# footer has no such colours. Needs PIL and Vulkan (skipped otherwise).
+if python3 -c "import PIL" 2>/dev/null && [ "${ES_CHECK_NO_VULKAN:-0}" != 1 ]; then
+    footer_colors() {   # style -> "green red" pixel counts of the footer, 480x272 capture at vblank 1000 of the modes route
+        sdata=$(fresh_data); shots=$(mktemp -d)
+        EMOTIONALSENSE_BUTTONS=$1 EMOTIONALSENSE_CONFIRM=circle EMOTIONALSENSE_CLOCK=virtual EMOTIONALSENSE_SHOT=1000 EMOTIONALSENSE_SHOT_DIR="$shots" \
+        EMOTIONALSENSE_SCRIPT="@$root/scripts/dump/modes.script" SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=dummy \
+            "$game" --data "$sdata" --frames 1010 --renderer vulkan --internal-scale 1 >/dev/null 2>&1 || true
+        python3 -I - "$shots/frame_1000.ppm" <<'PY'
+import sys
+from PIL import Image
+im = Image.open(sys.argv[1]).convert("RGB").crop((170, 245, 330, 272))
+g = r = 0
+px = im.load()
+for y in range(im.height):
+    for x in range(im.width):
+        R, G, B = px[x, y]
+        if G > 140 and R < 120 and B < 100: g += 1
+        if R > 190 and G < 90 and B < 90: r += 1
+print(g, r)
+PY
+        rm -rf "$sdata" "$shots"
+    }
+    set -- $(footer_colors playstation); psg=$1; psr=$2
+    set -- $(footer_colors xbox); xg=${1:-0}; xr=${2:-0}
+    if [ "${xg:-0}" -ge 8 ] && [ "${xr:-0}" -ge 8 ] && [ "${psg:-0}" -lt 3 ] && [ "${psr:-0}" -lt 3 ]; then
+        echo "OK: button style: Xbox footer has green $xg / red $xr pixels (A, B), PlayStation $psg / $psr"
+    else echo "FAIL: button style footer (xbox $xg/$xr, playstation $psg/$psr)" >&2; exit 1; fi
+else
+    echo "SKIP: button style capture (needs python3 with PIL and a Vulkan renderer)"
+fi

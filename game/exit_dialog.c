@@ -26,6 +26,7 @@
 #include <string.h>
 
 #include "exit_text.h"
+#include "button_style.h"
 #include "psprecomp/log.h"
 
 #define PAD_UP     0x0010u
@@ -237,7 +238,26 @@ static void text(uint32_t *px, int w, int h, const es_exit_text *t, int x, int y
 }
 
 /* A ring (circle button) or a cross, 14 units wide, drawn from primitives. */
+/* The confirm and cancel icons follow the button style (buttons.c): a 5x7 letter on the button. */
+bs_look djmax_button_for_action(int confirm);   /* buttons.c */
+static void letter_icon(uint32_t *px, int w, int h, int x, int y, int s, char L, uint32_t rgb) {
+    static const char *const G[4][7] = {
+        { "01110", "10001", "10001", "11111", "10001", "10001", "10001" },   /* A */
+        { "11110", "10001", "10001", "11110", "10001", "10001", "11110" },   /* B */
+        { "10001", "10001", "01010", "00100", "01010", "10001", "10001" },   /* X */
+        { "10001", "10001", "01010", "00100", "00100", "00100", "00100" },   /* Y */
+    };
+    const char *const *g = G[L == 'A' ? 0 : L == 'B' ? 1 : L == 'x' ? 2 : 3];
+    const uint32_t col = 0xFF000000u | ((rgb & 0xFF) << 16) | (rgb & 0xFF00u) | ((rgb >> 16) & 0xFF);
+    fill(px, w, h, x, y, 14 * s, 14 * s, 0xFF101010u);
+    for (int j = 0; j < 7; j++)
+        for (int i = 0; i < 5; i++)
+            if (g[j][i] == '1') fill(px, w, h, x + (2 + 2 * i) * s, y + 2 * j * s, 2 * s, 2 * s, col);
+}
 static void icon(uint32_t *px, int w, int h, int x, int y, int s, int cross, uint32_t col) {
+    const bs_look l = djmax_button_for_action((cross != 0) == (g_confirm_cross != 0));
+    if (l.letter) { letter_icon(px, w, h, x, y, s, l.letter, l.rgb); return; }
+    cross = l.shows == 'x';
     const int n = 14;
     for (int j = 0; j < n; j++)
         for (int i = 0; i < n; i++) {

@@ -92,6 +92,7 @@ and `es_scores.json` to `save-backups/`.
 | -- | Left stick | Analog |
 | Z / X / A / S | A / B / X / Y | cross / circle / square / triangle |
 | Q / W | LB, LT / RB, RT | L / R |
+| E / R | LT / RT in 3.2T, 4.2T and 6.2T songs | analog stick left / right (the side notes of the `.2T` styles) |
 | Enter / Backspace | Start / Back | Start / Select |
 | Alt+Enter | | borderless full screen <-> window |
 | F11 | | full screen at the rate chosen in the launcher <-> window |
@@ -117,7 +118,9 @@ Everything is in the launcher's Options screen and saved automatically.
 | Full screen rate | Borderless (default, desktop rate) or an exclusive 60 / 120 Hz mode for F11 |
 | Fever mode | **Respect** (default): the Fever starts by itself when the gauge fills and the lane speed you chose is kept. **Original**: the PSP game untouched ([`docs/fever.md`](docs/fever.md)) |
 | Scoring system | **Respect** (default): your judgment percentage out of 1,000,000 (87.8 % reads 878,000; 100 % reads exactly 1,000,000), on the result screen and in the song list. **Original**: the PSP score. Display only: the game keeps writing its own record in both modes ([`docs/score.md`](docs/score.md)) |
-| Speed system | **Respect** (default): Auto Velocity. R and L change the speed in steps of 0.1 (1.0x to 7.0x) and the number is the apparent speed: 2.0 scrolls the same on a 100 and a 200 BPM song (a tempo change inside a song still speeds the notes up or down as in the game). A label `AV 2.3` replaces the game's speed sprite. **Original**: the PSP speeds, 0.5x to 7.0x in steps of 0.5 ([`docs/speed.md`](docs/speed.md)) |
+| Speed system | **Respect** (default): Auto Velocity. R and L change the speed in steps of 0.1 (1.0x to 7.0x) and the number is the apparent speed: 2.0 scrolls the same on a 100 and a 200 BPM song (a tempo change inside a song still speeds the notes up or down as in the game). The label `AV 2.3` replaces the game's speed sprite in play, and the song list and the pause menu show the same number. **Original**: the PSP speeds, 0.5x to 7.0x in steps of 0.5 ([`docs/speed.md`](docs/speed.md)) |
+| Button symbols | **Auto** (default: follows the controller you pressed last, PlayStation on the keyboard), PlayStation, Xbox (green A, red B, blue X, yellow Y), Steam Deck (A B X Y) or Switch (B A Y X by position). The game's prompts (OK, Cancel, Yes, No, Studio, ...) and the launcher's own hints follow it, composed with the confirm button; the face buttons are read by position, so the bottom button is always the PSP cross. Only the Vulkan renderer repaints the game's prompts ([`docs/buttons.md`](docs/buttons.md)) |
+| Triggers in .2T modes | **Analog (side notes)** (default): in 3.2T, 4.2T and 6.2T songs LT / RT push the analog stick left / right (the physical stick still wins; E / R on the keyboard always do). **L/R (speed)**: LT / RT stay L / R as in 0.1. Menus, 4T and 6T always use L / R ([`docs/buttons.md`](docs/buttons.md)) |
 | MISSION | Fever, scoring and speed are always **Original** in MISSION mode (the missions are balanced for the PSP rules), whatever the options say |
 | Background video smoothing | blends the 30 fps background video (off by default) |
 | Data update 1.02 | installs or removes the optional update |

@@ -66,6 +66,9 @@ if(NOT CMAKE_CROSSCOMPILING)
 
     add_executable(test_crash_scrub game/tests/test_crash_scrub.c)
     add_test(NAME crash_scrub COMMAND test_crash_scrub)
+
+    add_executable(test_button_style game/tests/test_button_style.c)
+    add_test(NAME button_style COMMAND test_button_style)
 endif()
 
 add_subdirectory(game)

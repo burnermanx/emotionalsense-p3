@@ -24,6 +24,16 @@ build the rest from your own disc.
 - **MISSION always plays Original**: in the mission mode the Fever, scoring and speed options do not apply (the
   missions are written for the PSP rules); no Respect record is written for a mission.
 - `EMOTIONALSENSE_SHOT_OVERLAY=1` puts the host overlay into captures (test aid).
+- **Speed in tenths in the song list and the pause menu** (Respect): R and L in the list step by 0.1, and the list's header
+  pill, its "SPEED" badge and the pause menu's pill show `AV 2.3` (the host paints over the digits of the game's sprites, which
+  only have art for .0 and .5). The save keeps receiving only what the game writes (byte-identical `SD.BIN` for the same inputs).
+- **Button symbols** (`button_style`: auto, playstation, xbox, steamdeck, switch; `EMOTIONALSENSE_BUTTONS`, `--buttons`, launcher
+  row): the game's button prompts and the launcher's footer and hints show the buttons of the chosen pad (Xbox letters coloured,
+  Steam Deck white, Switch positional B A Y X), composed with the confirm button. `auto` follows the controller used last
+  (`SDL_GameControllerGetType`, the Steam Deck by its ids or `SteamDeck=1`; Windows/XInput is Xbox). Face buttons are read by
+  position on every pad (`SDL_GAMECONTROLLER_USE_BUTTON_LABELS=0`). Vulkan only (`docs/buttons.md`).
+- **Triggers in the .2T modes** (`triggers_2t`: stick (default) or lr; `EMOTIONALSENSE_TRIGGERS_2T`, `--triggers-2t`, launcher row):
+  LT / RT are the analog stick's left / right in 3.2T, 4.2T and 6.2T songs; the keyboard's E / R always are. `lr` is the 0.1 behaviour.
 
 ### Changed
 

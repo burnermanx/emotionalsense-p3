@@ -54,6 +54,10 @@ extern int djmax_fever_respect;              /* guest_patches.c */
 #define LABEL_HOLD   45                      /* vblanks at full strength, then a fade */
 #define LABEL_FADE   15
 
+static atomic_ullong g_pill_vb, g_badge_vb;  /* V4: vblank + 1 of the last list update of each sprite */
+static atomic_int g_list_press;              /* net R (+1) / L (-1) presses of the list not yet applied */
+static atomic_int g_paused_for;              /* consecutive vblanks of a song that has started and is not running */
+int djmax_song_paused(void);                 /* guest_patches.c */
 static int g_v = 25;                         /* the chosen speed, in tenths */
 static int g_boost;                          /* tenths the Fever (Original) has added on top */
 static int g_inited, g_in_mission;
@@ -236,12 +240,26 @@ void djmax_speed_tick(void)
     }
     if (scene == 3) {
         if (g_dirty && vb - g_dirty_vb >= 30) { file_save(); g_dirty = 0; }
+        atomic_store(&g_paused_for, djmax_song_paused() ? atomic_load(&g_paused_for) + 1 : 0);
         return;
     }
+    atomic_store(&g_paused_for, 0);
+    if (scene != 2) { atomic_store(&g_pill_vb, 0); atomic_store(&g_badge_vb, 0); }
+    if (scene == 2 && getenv("EMOTIONALSENSE_TRACE_SPEED") && vb % 20 == 0)
+        psp_log("speed: list vb=%llu pill=%llu badge=%llu\n", (unsigned long long)vb,
+                (unsigned long long)atomic_load(&g_pill_vb), (unsigned long long)atomic_load(&g_badge_vb));
     if (scene < 2) return;                   /* boot and title: the save is not loaded yet */
     if (!g_inited) { lazy_init(); return; }
     uint8_t b = psp_read8(SPEED_BYTE);
-    if (b != g_last_byte) {                  /* R / L in the song list, or a style change reloading its saved speed */
+    int press = scene == 2 ? atomic_exchange(&g_list_press, 0) : 0;
+    if (scene != 2) atomic_store(&g_list_press, 0);
+    if (press) {                             /* R / L in the song list: a step of 0.1, whatever the game did to its index */
+        int nv = g_v + (press > 0 ? 1 : -1) * (press > 0 ? press : -press);
+        nv = nv < MIN_T ? MIN_T : nv > MAX_T ? MAX_T : nv;
+        if (nv != g_v) { psp_log("speed: list %s -> %d.%d\n", press > 0 ? "up" : "down", nv / 10, nv % 10); changed(vb); }
+        g_v = nv;
+        set_byte(idx_of(g_v));               /* overwrites the game's own 0.5 step */
+    } else if (b != g_last_byte) {           /* a style change reloading its saved speed, or a style change reloading its saved speed */
         int nv = (int)b * 5;
         nv = nv < MIN_T ? MIN_T : nv > MAX_T ? MAX_T : nv;
         psp_log("speed: the list set the game's index %u, speed %d.%d (was %d.%d)\n", b, nv / 10, nv % 10,
@@ -365,6 +383,168 @@ void __wrap_psp_func_00017F04(void)
     psp_log("speed: down -> %d.%d (+%d.%d Fever) lane target %.4f\n", g_v / 10, g_v % 10, g_boost / 10, g_boost % 10,
             (double)load_f(lane + 0x1940));
     psp_cpu.r[PSP_REG_V0] = 1;
+}
+
+/* ---- V4: the song list and the pause menu (round 36) -------------------------------------
+ *
+ * The song list shows the speed twice: the header pill "LB [X 2.5] RB" (updated by 0x2D320 every frame) and the
+ * badge "SPEED 2.5" at the bottom left (0x2D618); the pause menu shows the same pill. Their art has frames for
+ * .0 and .5 only, so in Respect the host patches the frame it presents (the overlay): it paints over the digits
+ * with the colours of the pixels beside them (per row, nothing from the game's art is stored) and draws the
+ * speed in tenths, "AV 2.3", with the same rasterised glyphs as the in-song label.
+ *
+ * R and L in the list: the game's own handler (0x30938) steps its index by 0.5 and plays its sound; the host sees
+ * the press through the button test 0x6D234 (called with the list's two return sites) and, a tick later, takes
+ * a step of 0.1 instead and writes back the valid index. */
+static int glyph_index(char c);
+static float glyph_cov(const es_glyph *g, float sx, float sy, float scale);
+static void blend(uint32_t *d, unsigned r, unsigned g, unsigned b, float a);
+
+void __real_psp_func_0002D320(void);
+void __wrap_psp_func_0002D320(void)
+{
+    atomic_store(&g_pill_vb, psp_display_vblanks() + 1);
+    __real_psp_func_0002D320();
+}
+
+void __real_psp_func_0002D618(void);
+void __wrap_psp_func_0002D618(void)
+{
+    atomic_store(&g_badge_vb, psp_display_vblanks() + 1);
+    __real_psp_func_0002D618();
+}
+
+#define RA_LIST_L 0x00030DF0u                 /* after the "L pressed?" test of the list (0x30DE8) */
+#define RA_LIST_R 0x00030EA4u                 /* after the "R pressed?" test (0x30E9C) */
+void __real_psp_func_0006D234(void);
+void __wrap_psp_func_0006D234(void)
+{
+    uint32_t ra = psp_cpu.r[PSP_REG_RA];
+    __real_psp_func_0006D234();
+    if (psp_cpu.r[PSP_REG_V0] != 0 && (ra == RA_LIST_L || ra == RA_LIST_R))
+        atomic_fetch_add(&g_list_press, ra == RA_LIST_R ? 1 : -1);
+}
+
+/* The window's overlay, V4. Coordinates are the 480x272 frame's, scaled by s = w / 480. */
+/* the patch (inclusive), the two clean columns to blend between, and a signature: two pixels of the sprite's own
+ * edge (x1, x2 at row sy) that must be at least smin bright, else the sprite is not on screen */
+typedef struct { int x0, y0, x1, y1, xl, xr, sx1, sx2, sy, smin; } es_patch;
+
+static int px_lum(uint32_t c) { return (int)((c & 255) * 30 + ((c >> 8) & 255) * 59 + ((c >> 16) & 255) * 11) / 100; }
+
+/* Paint the patch with the per-row blend of the pixels at its two clean columns. 0 if those do not look
+ * like what the sprite's face is (a dark or empty screen where the sprite is not drawn). */
+static int patch_fill(uint32_t *px, int w, int h, int s, const es_patch *p)
+{
+    const int x0 = p->x0 * s, x1 = (p->x1 + 1) * s, y0 = p->y0 * s, y1 = (p->y1 + 1) * s;
+    const int xl = p->xl * s + s / 2, xr = p->xr * s + s / 2;
+    if (x1 > w || y1 > h || xl < 0 || xr >= w || p->sx2 * s + s / 2 >= w) return 0;
+    const int sy = p->sy * s + s / 2;
+    if (px_lum(px[sy * w + p->sx1 * s + s / 2]) < p->smin || px_lum(px[sy * w + p->sx2 * s + s / 2]) < p->smin) return 0;
+    for (int y = y0; y < y1; y++) {
+        uint32_t a = px[y * w + xl], b = px[y * w + xr];
+        for (int x = x0; x < x1; x++) {
+            int t = x1 - x0 > 1 ? (x - x0) * 256 / (x1 - x0 - 1) : 0;
+            uint32_t o = 0xFF000000u;
+            for (int c = 0; c < 24; c += 8) {
+                int ca = (a >> c) & 255, cb = (b >> c) & 255;
+                o |= (uint32_t)((ca * (256 - t) + cb * t) >> 8) << c;
+            }
+            px[y * w + x] = o;
+        }
+    }
+    return 1;
+}
+
+/* Draw `txt` in the patch, centred, as large as the patch allows (height_units = the text's digit height in
+ * 480x272 pixels at most). */
+static void patch_text(uint32_t *px, int w, int h, int s, const es_patch *p, const char *txt, int height_units,
+                       unsigned r, unsigned g, unsigned b)
+{
+    float adv = 0.f;
+    for (const char *c = txt; *c; c++) {
+        if (*c == ' ') { adv += 24.f; continue; }
+        int gi = glyph_index(*c);
+        if (gi >= 0) adv += (float)es_speed_glyphs[gi].adv;
+    }
+    if (adv <= 0.f) return;
+    const float pw = (float)((p->x1 - p->x0 + 1) * s), ph = (float)((p->y1 - p->y0 + 1) * s);
+    float k = ((float)height_units * (float)s) / (float)es_speed_digit_h;
+    if (adv * k > pw) k = pw / adv;
+    if ((float)es_speed_digit_h * k > ph) k = ph / (float)es_speed_digit_h;
+    float pen = (float)(p->x0 * s) + (pw - adv * k) * 0.5f;
+    float top = (float)(p->y0 * s) + (ph - (float)es_speed_digit_h * k) * 0.5f;
+    for (const char *c = txt; *c; c++) {
+        if (*c == ' ') { pen += 24.f * k; continue; }
+        int gi = glyph_index(*c);
+        if (gi < 0) continue;
+        const es_glyph *gl = &es_speed_glyphs[gi];
+        float gx = pen + (float)gl->xoff * k;
+        float gy = top + (float)(gl->yoff - 27) * k;
+        int dx0 = (int)gx - 1, dy0 = (int)gy - 1;
+        int dx1 = (int)(gx + (float)gl->w * k) + 2, dy1 = (int)(gy + (float)gl->h * k) + 2;
+        for (int y = dy0; y < dy1; y++)
+            for (int x = dx0; x < dx1; x++) {
+                if (x < p->x0 * s || x >= (p->x1 + 1) * s || y < p->y0 * s || y >= (p->y1 + 1) * s || x >= w || y >= h) continue;
+                float c0 = glyph_cov(gl, ((float)x - gx) / k, ((float)y - gy) / k, 1.f / k);
+                if (c0 > 0.f) blend(&px[y * w + x], r, g, b, c0);
+            }
+        pen += (float)gl->adv * k;
+    }
+}
+
+static const es_patch P_LIST_DIGIT = { 11, 214, 38, 229, 10, 39, 9, 40, 206, 190 };
+static const es_patch P_LIST_CAP   = { 12, 205, 38, 211, 11, 39, 9, 40, 206, 190 };
+
+/* The pill's box is as wide as its text needs (the art has a frame per speed), so its bounds are found on the
+ * row of its bright top edge (`row`, 480x272 units; the interior stays at >= 150 there), outwards from `cx`;
+ * the patch is 32 units wide around the middle of the box, the two clean columns are 2 units inside its edges.
+ * 0 if no box of a believable width is there. */
+static int pill_patch(const uint32_t *px, int w, int h, int s, int cx, int row, int y0, int y1, es_patch *o)
+{
+    const int y = row * s + s / 2;
+    if (y >= h || cx * s >= w) return 0;
+    int a = cx, b = cx;
+    if (px_lum(px[y * w + cx * s + s / 2]) < 150) return 0;
+    while (a > 1 && px_lum(px[y * w + (a - 1) * s + s / 2]) >= 150) a--;
+    while (b < 478 && px_lum(px[y * w + (b + 1) * s + s / 2]) >= 150) b++;
+    if (b - a < 36 || b - a > 60) return 0;
+    const int mid = (a + b) / 2;
+    o->x0 = mid - 15; o->x1 = mid + 15; o->y0 = y0; o->y1 = y1;
+    o->xl = a + 2; o->xr = b - 2;
+    o->sx1 = a + 2; o->sx2 = b - 2; o->sy = row; o->smin = 150;
+    return 1;
+}
+
+int es_speed_ui_overlay(uint32_t *px, int w, int h)
+{
+    if (!djmax_speed_respect || djmax_mission_active()) return 0;
+    const int s = w / 480 < 1 ? 1 : w / 480;
+    const int scene = (int)psp_scene_now();
+    char txt[16];
+    snprintf(txt, sizeof txt, "AV %d.%d", g_v / 10, g_v % 10);
+    int drew = 0;
+    if (scene == 2) {
+        const int pv = atomic_load(&g_pill_vb) != 0, bv = atomic_load(&g_badge_vb) != 0;   /* drawn since the list was entered */
+        es_patch pill;
+        if (pv && pill_patch(px, w, h, s, 391, 15, 15, 27, &pill) && patch_fill(px, w, h, s, &pill)) {
+            patch_text(px, w, h, s, &pill, txt, 8, 24, 24, 24);
+            drew = 1;
+        }
+        if (bv && patch_fill(px, w, h, s, &P_LIST_DIGIT) && patch_fill(px, w, h, s, &P_LIST_CAP)) {
+            snprintf(txt, sizeof txt, "%d.%d", g_v / 10, g_v % 10);
+            patch_text(px, w, h, s, &P_LIST_DIGIT, txt, 12, 255, 255, 255);
+            patch_text(px, w, h, s, &P_LIST_CAP, "AV", 5, 190, 190, 190);
+            drew = 1;
+        }
+    } else if (scene == 3 && atomic_load(&g_paused_for) >= 20) {
+        es_patch pill;
+        if (pill_patch(px, w, h, s, 134, 141, 141, 153, &pill) && patch_fill(px, w, h, s, &pill)) {
+            patch_text(px, w, h, s, &pill, txt, 8, 24, 24, 24);
+            drew = 1;
+        }
+    }
+    return drew;
 }
 
 /* ---- the label ---------------------------------------------------------------- */
