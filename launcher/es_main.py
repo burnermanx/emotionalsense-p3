@@ -309,6 +309,31 @@ def _show_error(msg: str) -> None:
         pass
 
 
+class ProgressLines:
+    """`--progress-lines`: the preparation as `progress <0..1> <step>` lines on stdout, the protocol of
+    RecompLauncher's window-less setup step. A line is printed when the step changes or the fraction
+    moves by half a percent, so a long compile still prints now and then without flooding."""
+
+    def __init__(self, out=None):
+        self.out = out or sys.stdout
+        self.name = ""
+        self.last = -1.0
+
+    def step(self, name: str) -> None:
+        if name != self.name:
+            self.name = name
+            self.last = -1.0
+
+    def progress(self, f: float, _what: str = "") -> None:
+        f = max(0.0, min(1.0, f))
+        if f - self.last >= 0.005 or f >= 1.0 > self.last:
+            self.emit(f, t("prepare.step." + self.name) if self.name else "")
+
+    def emit(self, f: float, text: str) -> None:
+        self.last = f
+        print(f"progress {f:.3f} {text}".rstrip(), file=self.out, flush=True)
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="EmotionalSense-P3", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -334,6 +359,10 @@ def main(argv=None) -> int:
     ap.add_argument("--sync-log", action="store_true",
                     help="with --run: write the clock/vblank/audio diagnostic log to <data>/logs/sync-<time>.log "
                          "(also on when EMOTIONALSENSE_SYNC_LOG=1)")
+    ap.add_argument("--progress-lines", action="store_true",
+                    help="with --prepare: print 'progress <0..1> <step>' lines on stdout for a launcher that runs "
+                         "the preparation without a window (RecompLauncher); an already prepared game prints "
+                         "'progress 1 ...' and exits at once")
     ap.add_argument("--jobs", type=int, default=os.cpu_count() or 4)
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--version", action="store_true")
@@ -437,12 +466,18 @@ def main(argv=None) -> int:
         print(t("update.installed", count=n))
         return 0
     if a.prepare or a.run:
+        lines = ProgressLines() if a.progress_lines and a.prepare else None
         prep = es_prepare.Preparer(es_prepare.PrepareOptions(
             iso=a.iso or Path("."), data_dir=data, kit_dir=kit, jobs=a.jobs, force=a.force),
             log=vlog,
-            progress=(lambda f, s: print(f"\r{f * 100:5.1f}%", end="", file=sys.stderr, flush=True)) if a.verbose
-            else (lambda f, s: None))
+            progress=lines.progress if lines else
+            (lambda f, s: print(f"\r{f * 100:5.1f}%", end="", file=sys.stderr, flush=True)) if a.verbose
+            else (lambda f, s: None),
+            step=lines.step if lines else (lambda s: None))
         if a.prepare:
+            if lines and prep.is_prepared():
+                lines.emit(1.0, t("prepare.step.done"))
+                return 0
             if not a.iso:
                 if prep.is_prepared():
                     vlog(t("cli.prepared", path=prep.game_exe()))

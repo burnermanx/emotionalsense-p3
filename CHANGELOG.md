@@ -12,6 +12,11 @@ build the rest from your own disc.
 
 ### Added
 
+- **RecompLauncher support**: `recomplauncher.json` ships at the top of every package and at the root of
+  the AppImage. RecompLauncher compares an .iso with the Redump dump (its verified badge; the game's own check still decides), builds
+  the game window-less with `--prepare --progress-lines` (`progress <0..1> <step>` lines; an already
+  prepared game answers at once), keeps everything in its data folder (`--data`), starts it with `--run`
+  and shows the launcher options on the game's page. Without the new flag nothing changes.
 - **ZSO images** (`ZISO`, the LZ4 variant of CSO: `maxcso --format=zso`) are read in place like CSO,
   with a pure Python LZ4 block decoder (no new dependency); the "ZSO not supported" message is gone.
   Tested byte for byte against the ISO, with blocks from the reference `lz4` compressor.
@@ -40,6 +45,10 @@ build the rest from your own disc.
   START has no pill in any screen reached, so the Menu icon / plus are only in the table.
 - **Triggers in the .2T modes** (`triggers_2t`: stick (default) or lr; `EMOTIONALSENSE_TRIGGERS_2T`, `--triggers-2t`, launcher row):
   LT / RT are the analog stick's left / right in 3.2T, 4.2T and 6.2T songs; the keyboard's E / R always are. `lr` is the 0.1 behaviour.
+- **AppImage updates**: the AppImages carry their update information
+  (`gh-releases-zsync|burnermanx|emotionalsense-p3|latest|EmotionalSense-P3-*-<target>.AppImage.zsync`) and each
+  release publishes the `.zsync` next to them, so AppImageUpdate and similar tools (Gear Lever, AppImageLauncher)
+  can update an AppImage in place, downloading only what changed. Takes effect from the first release built with it.
 
 ### Changed
 

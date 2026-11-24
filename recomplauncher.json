@@ -1,0 +1,197 @@
+{
+  "$schema": "https://recomplauncher.com/schema/recomplauncher.json",
+  "format": 1,
+  "name": "EmotionalSense-P3",
+  "repo": "burnermanx/emotionalsense-p3",
+  "inputs": [
+    {
+      "id": "game",
+      "label": "Your DJMAX Portable 3 disc image (Korea, ULKS-46236): .iso, .chd, .cso or .zso, or a folder that holds the extracted PSP_GAME.",
+      "formats": [
+        { "type": "file", "extensions": ["iso", "chd", "cso", "zso"] },
+        { "type": "folder" }
+      ],
+      "dumps": [
+        { "name": "Korea (ULKS-46236)", "size": 1777631232, "crc32": "d3ed5d32" }
+      ]
+    }
+  ],
+  "start": {
+    "program": ["EmotionalSense-P3.exe", "EmotionalSense-P3.AppImage", "EmotionalSense-P3"],
+    "args": ["--run", "--data", "{data}"]
+  },
+  "prepare": {
+    "program": ["EmotionalSense-P3.exe", "EmotionalSense-P3.AppImage", "EmotionalSense-P3"],
+    "args": ["--prepare", "--progress-lines", "--iso={input:game}", "--data", "{data}"],
+    "label": "Recompiling the game for this computer from your disc",
+    "done": ["{data}/prepared.json"],
+    "keeps_copy": true
+  },
+  "saves": [
+    "{data}/ms/PSP/SAVEDATA",
+    "{data}/es_scores.json",
+    "{data}/es_speed.json"
+  ],
+  "config": [
+    {
+      "id": "main",
+      "format": "json",
+      "file": [{ "path": "{data}/launcher.json" }]
+    }
+  ],
+  "groups": [
+    { "id": "Advanced", "advanced": true }
+  ],
+  "settings": [
+    {
+      "id": "fever", "label": "Fever mode", "group": "Gameplay",
+      "help": "Respect: Fever starts by itself and the lane keeps your speed. Original: the X button, as on the PSP. MISSION always uses Original.",
+      "choices": [
+        { "label": "Respect", "set": { "fever": "\"respect\"" } },
+        { "label": "Original", "set": { "fever": "\"original\"" } }
+      ],
+      "defaults": { "fever": "\"respect\"" }
+    },
+    {
+      "id": "score", "label": "Scoring system", "group": "Gameplay",
+      "help": "Respect: your judgment percentage out of 1,000,000. Original: the PSP score. Both records are kept; MISSION always uses Original.",
+      "choices": [
+        { "label": "Respect", "set": { "score": "\"respect\"" } },
+        { "label": "Original", "set": { "score": "\"original\"" } }
+      ],
+      "defaults": { "score": "\"respect\"" }
+    },
+    {
+      "id": "speed", "label": "Speed system", "group": "Gameplay",
+      "help": "Respect: Auto Velocity, steps of 0.1 from 1.0 to 7.0, the same look at any BPM. Original: the PSP speeds. MISSION always uses Original.",
+      "choices": [
+        { "label": "Respect", "set": { "speed": "\"respect\"" } },
+        { "label": "Original", "set": { "speed": "\"original\"" } }
+      ],
+      "defaults": { "speed": "\"respect\"" }
+    },
+    {
+      "id": "confirm", "label": "Confirm button", "group": "Gameplay",
+      "help": "Which button confirms in the menus. Auto: circle in Japanese and Korean, cross in the other languages.",
+      "choices": [
+        { "label": "Auto", "set": { "confirm": "\"auto\"" } },
+        { "label": "Cross", "set": { "confirm": "\"cross\"" } },
+        { "label": "Circle", "set": { "confirm": "\"circle\"" } }
+      ],
+      "defaults": { "confirm": "\"auto\"" }
+    },
+    {
+      "id": "unlock", "label": "Unlock all songs", "group": "Gameplay",
+      "help": "Every chart and the 4.2T and 6.2T modes. What the game saves while it's on stays unlocked.",
+      "choices": [
+        { "label": "On", "set": { "unlock": "true" } },
+        { "label": "Off", "set": { "unlock": "false" } }
+      ],
+      "defaults": { "unlock": "true" }
+    },
+    {
+      "id": "unlock_items", "label": "Unlock all items", "group": "Gameplay",
+      "help": "DJ icons, crews, gear, notes, gallery and videos. Crews carry gameplay skills.",
+      "choices": [
+        { "label": "On", "set": { "unlock_items": "true" } },
+        { "label": "Off", "set": { "unlock_items": "false" } }
+      ],
+      "when": { "unlock": "true" },
+      "defaults": { "unlock_items": "true" }
+    },
+    {
+      "id": "language", "label": "Language", "group": "Gameplay",
+      "help": "The game's own prompts and the setup messages. Auto follows your system.",
+      "choices": [
+        { "label": "Auto", "set": { "language": "\"auto\"" } },
+        { "label": "English", "set": { "language": "\"en\"" } },
+        { "label": "Português (Brasil)", "set": { "language": "\"pt-BR\"" } },
+        { "label": "Español", "set": { "language": "\"es\"" } },
+        { "label": "日本語", "set": { "language": "\"ja\"" } },
+        { "label": "한국어", "set": { "language": "\"ko\"" } }
+      ],
+      "defaults": { "language": "\"auto\"" }
+    },
+    {
+      "id": "scale", "label": "Internal resolution", "group": "Video",
+      "help": "What the game draws at. 1x is the PSP's 480x272; Auto fits your screen.",
+      "choices": [
+        { "label": "Auto", "set": { "scale": "\"auto\"" } },
+        { "label": "1x", "set": { "scale": "\"1\"" } },
+        { "label": "2x", "set": { "scale": "\"2\"" } },
+        { "label": "3x", "set": { "scale": "\"3\"" } },
+        { "label": "4x", "set": { "scale": "\"4\"" } }
+      ],
+      "defaults": { "scale": "\"auto\"" }
+    },
+    {
+      "id": "start_mode", "label": "Start in", "group": "Video",
+      "help": "Window or full screen when the game starts. Last: as you left it.",
+      "choices": [
+        { "label": "Last", "set": { "start_mode": "\"last\"" } },
+        { "label": "Window", "set": { "start_mode": "\"window\"" } },
+        { "label": "Full screen", "set": { "start_mode": "\"fullscreen\"" } }
+      ],
+      "defaults": { "start_mode": "\"last\"" }
+    },
+    {
+      "id": "refresh", "label": "Full screen rate", "group": "Video",
+      "help": "Native keeps your desktop's rate. The game always runs at the PSP's 59.94 Hz.",
+      "choices": [
+        { "label": "Native", "set": { "refresh": "\"native\"" } },
+        { "label": "Auto", "set": { "refresh": "\"auto\"" } },
+        { "label": "60 Hz", "set": { "refresh": "\"60\"" } },
+        { "label": "120 Hz", "set": { "refresh": "\"120\"" } }
+      ],
+      "defaults": { "refresh": "\"native\"" }
+    },
+    {
+      "id": "bga_smooth", "label": "Background video smoothing", "group": "Video",
+      "help": "Blends the in-song background video, which the game updates every other frame.",
+      "choices": [
+        { "label": "Off", "set": { "bga_smooth": "\"0\"" } },
+        { "label": "Blend frames", "set": { "bga_smooth": "\"blend\"" } }
+      ],
+      "defaults": { "bga_smooth": "\"0\"" }
+    },
+    {
+      "id": "renderer", "label": "Renderer", "group": "Advanced",
+      "help": "Auto uses Vulkan and falls back to the software renderer, which draws at 1x.",
+      "choices": [
+        { "label": "Auto", "set": { "renderer": "\"auto\"" } },
+        { "label": "Vulkan", "set": { "renderer": "\"vulkan\"" } },
+        { "label": "Software", "set": { "renderer": "\"software\"" } }
+      ],
+      "defaults": { "renderer": "\"auto\"" }
+    },
+    {
+      "id": "update", "label": "Data update 1.02", "group": "Advanced",
+      "help": "Uses the 1.02 data update when you installed it from the EmotionalSense-P3 window.",
+      "choices": [
+        { "label": "On", "set": { "update": "true" } },
+        { "label": "Off", "set": { "update": "false" } }
+      ],
+      "defaults": { "update": "true" }
+    }
+  ],
+  "folders": {
+    "saves": [{ "path": "{data}/ms/PSP/SAVEDATA" }],
+    "logs": [{ "path": "{data}/logs" }],
+    "crashes": [{ "path": "{data}/crashes" }],
+    "game": [{ "path": "{data}/disc" }]
+  },
+  "actions": [
+    { "id": "saves", "label": "Saves", "help": "Your PSP save (SD.BIN).", "open": "saves" },
+    { "id": "logs", "label": "Logs", "help": "The renderer report and diagnostic logs.", "open": "logs" },
+    { "id": "crashes", "label": "Crash reports", "help": "Reports written when the game stops unexpectedly.", "open": "crashes" }
+  ],
+  "exit_codes": {
+    "0": "ok",
+    "2": "The game isn't prepared yet. Set it up again from its page.",
+    "3": "Vulkan didn't start and the renderer is set to Vulkan. Set Renderer to Auto, or see logs/renderer.log."
+  },
+  "system": {
+    "linux": { "glibc": "2.35", "graphics": { "vulkan": "1.0" } },
+    "windows": { "graphics": { "vulkan": "1.0" } }
+  }
+}
