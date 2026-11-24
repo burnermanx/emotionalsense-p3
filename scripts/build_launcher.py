@@ -109,12 +109,17 @@ def main() -> int:
         shutil.copy2(nt, root / "THIRD_PARTY_NOTICES.md")
     for p in (ROOT / "licenses").glob("*") if (ROOT / "licenses").exists() else []:
         shutil.copy2(p, lic / p.name)
+    # RecompLauncher reads it next to the program (top of the .zip / .tar.gz, which it unwraps) and at the
+    # root of an AppImage (docs: https://github.com/elripalda/RecompLauncher/blob/main/docs/DEVELOPERS.md).
+    rl = ROOT / "recomplauncher.json"
+    shutil.copy2(rl, root / rl.name)
     print(f"onedir: {root}")
 
     if a.appimage:
         appdir = work / "AppDir"
         (appdir / "usr").mkdir(parents=True)
         shutil.copytree(root, appdir / "usr" / "lib" / NAME, symlinks=True)
+        shutil.copy2(rl, appdir / rl.name)
         (appdir / "AppRun").write_text(
             '#!/bin/sh\nHERE="$(dirname "$(readlink -f "$0")")"\n'
             f'exec "$HERE/usr/lib/{NAME}/{NAME}" "$@"\n')

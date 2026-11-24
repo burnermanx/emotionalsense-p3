@@ -12,6 +12,11 @@ build the rest from your own disc.
 
 ### Added
 
+- **RecompLauncher support**: `recomplauncher.json` ships at the top of every package and at the root of
+  the AppImage. RecompLauncher compares an .iso with the Redump dump (its verified badge; the game's own check still decides), builds
+  the game window-less with `--prepare --progress-lines` (`progress <0..1> <step>` lines; an already
+  prepared game answers at once), keeps everything in its data folder (`--data`), starts it with `--run`
+  and shows the launcher options on the game's page. Without the new flag nothing changes.
 - **ZSO images** (`ZISO`, the LZ4 variant of CSO: `maxcso --format=zso`) are read in place like CSO,
   with a pure Python LZ4 block decoder (no new dependency); the "ZSO not supported" message is gone.
   Tested byte for byte against the ISO, with blocks from the reference `lz4` compressor.
