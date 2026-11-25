@@ -406,12 +406,28 @@ jobs:
           ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASS: ${{ secrets.ANDROID_KEY_PASS }}
+        # A release APK must carry the project's own key: Android installs an update only over an
+        # app signed by the same key, and the debug key Gradle would fall back to is made afresh on
+        # every runner. A missing secret stops the release instead.
         run: |
           set -eu
-          if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
-            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "${RUNNER_TEMP}/release.keystore"
-            export ANDROID_KEYSTORE_PATH="${RUNNER_TEMP}/release.keystore"
+          missing=""
+          for s in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASS ANDROID_KEY_ALIAS ANDROID_KEY_PASS; do
+            eval "v=\${$s:-}"
+            [ -n "$v" ] || missing="$missing $s"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::release signing secrets missing:$missing"
+            exit 1
           fi
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "${RUNNER_TEMP}/release.keystore"
+          export ANDROID_KEYSTORE_PATH="${RUNNER_TEMP}/release.keystore"
+          # the key itself must open with these secrets; its certificate is what the APK must carry
+          # (the SHA-256 of the DER certificate, the digest apksigner prints; no locale-dependent text)
+          keytool -exportcert -keystore "$ANDROID_KEYSTORE_PATH" -storepass:env ANDROID_KEYSTORE_PASS \
+            -alias "$ANDROID_KEY_ALIAS" > "${RUNNER_TEMP}/key.der"
+          sha256sum "${RUNNER_TEMP}/key.der" | cut -d' ' -f1 > "${RUNNER_TEMP}/key.sha256"
+          test -s "${RUNNER_TEMP}/key.der"
           ./android/gradlew -p android assembleRelease -PandroidAbis=arm64-v8a -PandroidCompileSdk=36 --no-daemon
 
       - name: Guard
@@ -423,6 +439,25 @@ jobs:
           mkdir -p out
           cp "$apk" "out/EmotionalSense-P3-$version-android-arm64.apk"
           python3 scripts/release_guard.py "out/EmotionalSense-P3-$version-android-arm64.apk"
+          # signature: valid, one signer, and that signer is the release key (not the debug key)
+          apksigner="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          "$apksigner" verify --verbose --print-certs "out/EmotionalSense-P3-$version-android-arm64.apk" \
+            > "${RUNNER_TEMP}/sig.txt"
+          cat "${RUNNER_TEMP}/sig.txt"
+          grep -q '^Verified using v2 scheme (APK Signature Scheme v2): true' "${RUNNER_TEMP}/sig.txt"
+          test "$(grep -c '^Signer #[0-9]* certificate SHA-256 digest:' "${RUNNER_TEMP}/sig.txt")" = 1
+          if grep -q 'certificate DN: .*CN=Android Debug' "${RUNNER_TEMP}/sig.txt"; then
+            echo "::error::the APK is signed with a debug key"
+            exit 1
+          fi
+          got=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "${RUNNER_TEMP}/sig.txt")
+          want=$(cat "${RUNNER_TEMP}/key.sha256")
+          if [ "$got" != "$want" ]; then
+            echo "::error::the APK's signer ($got) is not the release key ($want)"
+            exit 1
+          fi
+          echo "signed with the release key: $got"
+          rm -f "${RUNNER_TEMP}/release.keystore"
 
       - uses: actions/upload-artifact@v4
         with:
