@@ -50,3 +50,23 @@ __pycache__/
 
 # Portable data folder of a source checkout (launcher/es_portable.py)
 /EmotionalSense-P3-data/
+
+# Android build output: dependencies and kit (scripts/android_build_deps.sh), Gradle and
+# NDK caches, built packages. Only the sources under android/ are versioned (android/.gitignore
+# covers the Gradle folders inside it).
+/build-android/
+/out/
+*.apk
+*.aab
+*.idsig
+android/.gradle/
+android/.kotlin/
+android/build/
+android/app/build/
+android/app/.cxx/
+android/local.properties
+
+# Signing keys (the release key lives only in the GitHub secrets and the maintainer's backup)
+*.keystore
+*.jks
+*.p12

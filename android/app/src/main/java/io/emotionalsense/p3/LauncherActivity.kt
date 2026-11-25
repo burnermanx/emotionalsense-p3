@@ -85,6 +85,12 @@ class LauncherActivity : Activity() {
         private val SPEED_LABELS = listOf("Respect (padrão)", "Original (PSP)")
         private val SCORE_LABELS = listOf("Respect (padrão)", "Original (PSP)")
 
+        private val BUTTONS_VALUES = listOf("auto", "playstation", "xbox", "steamdeck", "switch")
+        private val BUTTONS_LABELS = listOf("Auto (padrão)", "PlayStation", "Xbox", "Steam Deck", "Switch")
+
+        private val TRIGGERS_VALUES = listOf("stick", "lr")
+        private val TRIGGERS_LABELS = listOf("Analógico (laterais, padrão)", "L/R (velocidade)")
+
         private val TOUCH_MODE_VALUES = listOf("auto", "on", "off")
         private val TOUCH_MODE_LABELS = listOf("Auto (padrão)", "Sempre", "Desligado")
     }
@@ -106,6 +112,8 @@ class LauncherActivity : Activity() {
     private lateinit var spFever: Spinner
     private lateinit var spSpeed: Spinner
     private lateinit var spScore: Spinner
+    private lateinit var spButtons: Spinner
+    private lateinit var spTriggers: Spinner
     private lateinit var cbUnlock: CheckBox
     private lateinit var cbUnlockItems: CheckBox
 
@@ -653,6 +661,12 @@ class LauncherActivity : Activity() {
         spScore = addSpinnerRow(gameCard, "Pontuação (Score)", SCORE_LABELS) { pos ->
             savePref { putString("score", RESPECT_ORIG_VALUES.getOrElse(pos) { "respect" }) }
         }
+        spButtons = addSpinnerRow(gameCard, "Símbolos dos botões", BUTTONS_LABELS) { pos ->
+            savePref { putString("buttons", BUTTONS_VALUES.getOrElse(pos) { "auto" }) }
+        }
+        spTriggers = addSpinnerRow(gameCard, "Gatilhos nos modos .2T", TRIGGERS_LABELS) { pos ->
+            savePref { putString("triggers_2t", TRIGGERS_VALUES.getOrElse(pos) { "stick" }) }
+        }
         cbUnlock = addCheckBoxRow(gameCard, "Desbloquear músicas e modos") { checked ->
             savePref { putBoolean("unlock", checked) }
         }
@@ -806,6 +820,8 @@ class LauncherActivity : Activity() {
             selectValue(spFever, RESPECT_ORIG_VALUES, prefs.getString("fever", "respect") ?: "respect")
             selectValue(spSpeed, RESPECT_ORIG_VALUES, prefs.getString("speed", "respect") ?: "respect")
             selectValue(spScore, RESPECT_ORIG_VALUES, prefs.getString("score", "respect") ?: "respect")
+            selectValue(spButtons, BUTTONS_VALUES, prefs.getString("buttons", "auto") ?: "auto")
+            selectValue(spTriggers, TRIGGERS_VALUES, prefs.getString("triggers_2t", "stick") ?: "stick")
             cbUnlock.isChecked = prefs.getBoolean("unlock", true)
             cbUnlockItems.isChecked = prefs.getBoolean("unlock_items", true)
 
@@ -837,6 +853,8 @@ class LauncherActivity : Activity() {
             .putString("fever", RESPECT_ORIG_VALUES.getOrElse(spFever.selectedItemPosition) { "respect" })
             .putString("speed", RESPECT_ORIG_VALUES.getOrElse(spSpeed.selectedItemPosition) { "respect" })
             .putString("score", RESPECT_ORIG_VALUES.getOrElse(spScore.selectedItemPosition) { "respect" })
+            .putString("buttons", BUTTONS_VALUES.getOrElse(spButtons.selectedItemPosition) { "auto" })
+            .putString("triggers_2t", TRIGGERS_VALUES.getOrElse(spTriggers.selectedItemPosition) { "stick" })
             .putBoolean("unlock", cbUnlock.isChecked)
             .putBoolean("unlock_items", cbUnlockItems.isChecked)
             .putString("renderer", RENDERER_VALUES.getOrElse(spRenderer.selectedItemPosition) { "vulkan" })
@@ -870,6 +888,8 @@ class LauncherActivity : Activity() {
             putExtra(GameActivity.EXTRA_FEVER, prefs.getString("fever", "respect") ?: "respect")
             putExtra(GameActivity.EXTRA_SPEED, prefs.getString("speed", "respect") ?: "respect")
             putExtra(GameActivity.EXTRA_SCORE, prefs.getString("score", "respect") ?: "respect")
+            putExtra(GameActivity.EXTRA_BUTTONS, prefs.getString("buttons", "auto") ?: "auto")
+            putExtra(GameActivity.EXTRA_TRIGGERS_2T, prefs.getString("triggers_2t", "stick") ?: "stick")
             putExtra(GameActivity.EXTRA_UNLOCK, prefs.getBoolean("unlock", true))
             putExtra(GameActivity.EXTRA_UNLOCK_ITEMS, prefs.getBoolean("unlock_items", true))
             putExtra(GameActivity.EXTRA_AUDIO_LATENCY_MS, prefs.getInt("audio_latency_ms", 70).coerceIn(10, 500))

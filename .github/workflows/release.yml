@@ -78,7 +78,7 @@ jobs:
         run: |
           set -eu
           mkdir -p out
-          curl -fsSL -o "out/pspdecrypt-src-${PSPDECRYPT_REV%${PSPDECRYPT_REV#???????}}.tar.gz" \
+          curl -fsSL -o "out/pspdecrypt-source-${PSPDECRYPT_REV%${PSPDECRYPT_REV#???????}}.tar.gz" \
             "https://github.com/John-K/pspdecrypt/archive/${PSPDECRYPT_REV}.tar.gz"
 
       - name: Release notes from CHANGELOG.md

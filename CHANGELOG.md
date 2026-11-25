@@ -12,6 +12,13 @@ build the rest from your own disc.
 
 ### Added
 
+- **Android (arm64)**: an APK that prepares the game on the phone from the player's own disc image (Storage Access Framework),
+  with the same pipeline as the PC (disc extraction, pspdecrypt as a separate program, recompilation, an on-device compiler from
+  the APK's kit) and loads the result as a library; touch controls; the launcher's options, including the button symbols and the
+  2T triggers. The APK carries nothing from the game (`scripts/release_guard.py` checks it) and is signed with the project's
+  release key: a release without the signing secrets fails instead of shipping a debug-signed APK.
+- The pspdecrypt source next to the packages is `pspdecrypt-source-<rev>.tar.gz` (was `-src`).
+
 - **RecompLauncher, round 37**: `button_style=auto` starts from `RECOMPLAUNCHER_PAD` (`xbox` / `playstation`) before any controller
   is seen (a connected controller and a named style still win); `RECOMPLAUNCHER_MODE=bigpicture` with Start in "Last" opens
   in full screen; `recomplauncher.json` has rows for the button symbols and the 2T triggers; `prepared.json` is removed when a rebuild starts,
