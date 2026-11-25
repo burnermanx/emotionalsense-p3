@@ -32,7 +32,7 @@ class Guard(unittest.TestCase):
                    "EmotionalSense-P3-0.1.0-windows-x86_64.zip", "EmotionalSense-P3-0.1.0-windows-arm64.zip",
                    "EmotionalSense-P3-0.2.0-android-arm64.apk", "EmotionalSense-P3-0.2.0-android-x86_64.apk"):
             self.assertIsNone(guard.name_problem(Path("out") / ok), ok)
-        self.assertIsNone(guard.name_problem(Path("out/emotionalsense-0.1.0-src.tar.gz")))
+        self.assertIsNone(guard.name_problem(Path("out/emotionalsense-0.1.0-source.tar.gz")))
         self.assertTrue(guard.name_problem(Path("out/EmotionalSense-P3-0.1.0-x86_64.AppImage")))     # no system
         self.assertTrue(guard.name_problem(Path("out/EmotionalSense-P3-0.1.0-win64.zip")))           # old name
         self.assertTrue(guard.name_problem(Path("out/EmotionalSense-Launcher-x86_64.AppImage")))  # a stale name

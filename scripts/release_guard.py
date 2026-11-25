@@ -16,7 +16,7 @@ A packaged .AppImage, .zip, .tar.gz or .apk must also be named
 EmotionalSense-P3-<version>-<system>-<arch>.<ext> with system windows|linux and arch
 x86_64|arm64|aarch64, or EmotionalSense-P3-<version>-android-<arm64|x86_64>.apk (the
 product's display name); anything else is reported as a failure, so a stale artefact
-name cannot reach a release. (The source tarball, ...-src.tar.gz, and the pspdecrypt
+name cannot reach a release. (The source tarball, ...-source.tar.gz, and the pspdecrypt
 source are not "packaged" artefacts and are not passed to this guard by name rules; they
 are listed like the rest.)
 """
@@ -127,7 +127,7 @@ def name_problem(path: Path):
     if n.endswith((".AppImage", ".zip", ".apk")) and not n.startswith(PRODUCT_PREFIX):
         return f"artefact name must start with {PRODUCT_PREFIX}"
     if n.startswith(PRODUCT_PREFIX) and n.endswith((".AppImage", ".zip", ".tar.gz", ".apk")) \
-            and not n.endswith("-src.tar.gz") and not PACKAGE_NAME.match(n):
+            and not n.endswith("-source.tar.gz") and not PACKAGE_NAME.match(n):
         return ("package name must be EmotionalSense-P3-<version>-<windows|linux>-<x86_64|arm64|aarch64>."
                 "<AppImage|zip|tar.gz> or EmotionalSense-P3-<version>-android-<arm64|x86_64>.apk")
     return None

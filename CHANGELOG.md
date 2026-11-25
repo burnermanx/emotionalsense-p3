@@ -12,6 +12,11 @@ build the rest from your own disc.
 
 ### Added
 
+- **RecompLauncher, round 37**: `button_style=auto` starts from `RECOMPLAUNCHER_PAD` (`xbox` / `playstation`) before any controller
+  is seen (a connected controller and a named style still win); `RECOMPLAUNCHER_MODE=bigpicture` with Start in "Last" opens
+  in full screen; `recomplauncher.json` has rows for the button symbols and the 2T triggers; `prepared.json` is removed when a rebuild starts,
+  so an interrupted build never looks finished; the source tarball is `emotionalsense-<version>-source.tar.gz` (was `-src`).
+
 - **RecompLauncher support**: `recomplauncher.json` ships at the top of every package and at the root of
   the AppImage. RecompLauncher compares an .iso with the Redump dump (its verified badge; the game's own check still decides), builds
   the game window-less with `--prepare --progress-lines` (`progress <0..1> <step>` lines; an already

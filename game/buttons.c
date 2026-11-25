@@ -15,6 +15,7 @@
 #include "psprecomp/log.h"
 
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "button_style.h"
@@ -91,6 +92,15 @@ void djmax_buttons_tick(void) {
 }
 
 void djmax_buttons_init(void) {
+    /* RecompLauncher tells which pad family the user has before any controller is seen
+     * (RECOMPLAUNCHER_PAD = xbox | playstation). `auto` starts from it; a controller that
+     * connects later still decides. Only when the option is auto: a named style always wins. */
+    const char *hint = getenv("RECOMPLAUNCHER_PAD");
+    if (djmax_button_style == BS_AUTO && hint) {
+        if (!strcmp(hint, "xbox")) g_auto_style = BS_XBOX;
+        else if (!strcmp(hint, "playstation")) g_auto_style = BS_PLAYSTATION;
+        psp_log("buttons: RECOMPLAUNCHER_PAD=%s -> auto starts as style %d\n", hint, g_auto_style);
+    }
     djmax_install_glyph_rules();
     psp_ctrl_set_trigger_hook(triggers_as_stick_now);
 }

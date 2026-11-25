@@ -109,6 +109,23 @@ check_exit() {
 }
 check_exit
 
+# --- RecompLauncher pad hint (RL1): `auto` starts from RECOMPLAUNCHER_PAD before a controller is seen; a named
+# style wins over it; no hint = the PlayStation default. The first "buttons: style" line of a short run tells.
+check_pad_hint() {   # hint option expected-style(1 playstation, 2 xbox)
+    log=$(mktemp)
+    RECOMPLAUNCHER_PAD=$1 EMOTIONALSENSE_BUTTONS=$2 EMOTIONALSENSE_CONFIRM=circle SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=dummy \
+        "$game" --data "$tmp" --frames 20 --renderer null >/dev/null 2>"$log" || true
+    got=$(grep -m1 '^buttons: style [0-9]*,' "$log" | sed 's/buttons: style \([0-9]*\),.*/\1/')
+    rm -f "$log"
+    [ "$got" = "$3" ] || { echo "FAIL: RECOMPLAUNCHER_PAD='$1' buttons=$2 gave style '$got', expected $3" >&2; return 1; }
+    echo "OK: RECOMPLAUNCHER_PAD='$1' with buttons=$2 starts as style $3"
+}
+check_pad_hint xbox auto 2
+check_pad_hint playstation auto 1
+check_pad_hint "" auto 1
+check_pad_hint xbox playstation 1
+check_pad_hint bogus auto 1
+
 # --- Respect scoring (SC), display only. Both routes play a whole song (about two
 # minutes each on the null renderer) with the life held, then stay on the result
 # screen. The host logs "score: result ... respect=N (weights W / C notes ...)".

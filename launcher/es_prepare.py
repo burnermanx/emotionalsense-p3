@@ -556,6 +556,8 @@ class Preparer:
         except (OSError, ValueError):
             pass
         info = self.verify()
+        # A rebuild that is interrupted must never look finished: the marker goes first and is written last.
+        self.state_file.unlink(missing_ok=True)
         if old and old.get("launcher") != self.launcher_stamp() or \
                 (old and old.get("iso", {}).get("sha256") != info["sha256"]):
             self.log(es_i18n.t("prepare.rebuild_notice"))
