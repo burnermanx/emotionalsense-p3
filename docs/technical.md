@@ -103,7 +103,18 @@ Known bugs and recent findings, in priority order:
   not a grid defect; the separate anchor was not applied.
 - **The stream change still differs.** PPSSPP has three long frames between
   484 and 510, ours has one at 481 (~27 frames). The title lands at 4624 here
-  and 4638 there.
+  and 4638 there. Round 37 measured ours with `EMOTIONALSENSE_TRACE_VBDT=430-560`: two long
+  frames, 11 and 9 periods (183 and 150 ms), at vblanks ~476 and ~478, then the
+  firmware-call rate goes from ~50 to ~460 per frame for the rest of the opening. In the
+  first one the main thread is in the player's stop function (`0x7A7EC`): it
+  `sceKernelWaitThreadEndCB`s the player's threads while `SetEventFlag(evf, 3)` (`0x7BD90`) is
+  called once per frame, ten times; in the second the feeder thread polls
+  `sceMpegRingbufferAvailableSize` / `Put` / `DelayThreadCB` ~100 times per frame
+  (961 `Put` calls in 9 frames). The one-call-per-frame rhythm points to the thread
+  wake-up latency of our scheduler (a thread woken by an event flag runs at the next
+  vblank instead of at once), not to I/O (no async read is pending); not confirmed
+  against PPSSPP, whose `work/ref/cadence_ppsspp_opening.txt` rows are not vblanks
+  (5.56 ms each), so the two traces cannot be compared line by line yet.
 
 `EMOTIONALSENSE_CLOCK=virtual` works: it no longer hangs, and it decodes the
 opening (title at ~1875) and reaches gameplay with `scripts/screens.script`.

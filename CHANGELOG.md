@@ -22,7 +22,7 @@ build the rest from your own disc.
   Measured in 29 routes: the game uses no texture-coordinate generation, block transfer, stencil or colour/alpha mask
   (`docs/technical.md`), so none was implemented.
 - The speed check of `scripts/check_scripts.sh` runs on a save built by the routes (`scripts/dump/profile.script`), not on the player's
-  save, and measures the scroll by contrast and by fitting each beat line's path: five passes in a row agree within 1 %.
+  save, and measures the scroll by contrast and by fitting each beat line's path: five passes in a row agree within 1 % (a measure out of the 1 % limit is repeated once).
 
 - **RecompLauncher support**: `recomplauncher.json` ships at the top of every package and at the root of
   the AppImage. RecompLauncher compares an .iso with the Redump dump (its verified badge; the game's own check still decides), builds
