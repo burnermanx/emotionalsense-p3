@@ -81,14 +81,14 @@ def listing(path: Path):
     p = str(path)
     if path.is_dir():
         for r, ds, fs in os.walk(path):
-            for n in ds + fs:
+            for n in fs:                  # files only: a folder is not a program (the Android sources have io/emotionalsense/)
                 yield str((Path(r) / n).relative_to(path)).replace(os.sep, "/")
     elif p.endswith((".zip", ".apk")):
         with zipfile.ZipFile(path) as z:
-            yield from z.namelist()
+            yield from (n for n in z.namelist() if not n.endswith("/"))
     elif re.search(r"\.(tar|tar\.gz|tgz|tar\.xz|tar\.bz2)$", p):
         with tarfile.open(path) as t:
-            yield from t.getnames()
+            yield from (m.name for m in t.getmembers() if not m.isdir())
     elif p.endswith(".AppImage"):
         yield from appimage_listing(path)
     else:
