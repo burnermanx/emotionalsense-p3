@@ -13,17 +13,34 @@ if(NOT gen_srcs)
 endif()
 
 # ATRAC3/ATRAC3+ (music, previews) and PSMF audio are decoded with libavcodec.
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavcodec libavutil)
+if(ANDROID)
+    if(NOT FFMPEG_INCLUDE_DIRS OR NOT FFMPEG_LIBRARIES)
+        message(FATAL_ERROR "On Android, FFMPEG_INCLUDE_DIRS and FFMPEG_LIBRARIES must be set")
+    endif()
+else()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavcodec libavutil)
+endif()
 
-add_executable(emotionalsense host.c crash.c app_icon.c update_overlay.c exit_dialog.c exit_text.c hle_djmax.c guest_patches.c buttons.c score.c speed.c speed_glyphs.c at3_dec.c avc_dec.c ${gen_srcs})
-# The file (and so the process) is called EmotionalSense-P3-game: other ports will
-# live in separate projects, so the name must say which game it is.
-set_target_properties(emotionalsense PROPERTIES OUTPUT_NAME "EmotionalSense-P3-game")
+set(_game_srcs host.c crash.c app_icon.c update_overlay.c exit_dialog.c exit_text.c hle_djmax.c guest_patches.c buttons.c score.c speed.c speed_glyphs.c at3_dec.c avc_dec.c ${gen_srcs})
+if(ANDROID)
+    add_library(emotionalsense SHARED ${_game_srcs})
+    set_target_properties(emotionalsense PROPERTIES OUTPUT_NAME "emotionalsense_game")
+else()
+    add_executable(emotionalsense ${_game_srcs})
+    # The file (and so the process) is called EmotionalSense-P3-game: other ports will
+    # live in separate projects, so the name must say which game it is.
+    set_target_properties(emotionalsense PROPERTIES OUTPUT_NAME "EmotionalSense-P3-game")
+endif()
 add_dependencies(emotionalsense version_header)
 target_include_directories(emotionalsense PRIVATE ${EMOTIONALSENSE_GEN_DIR}
                                                 ${PROJECT_BINARY_DIR}/generated)
-target_link_libraries(emotionalsense PRIVATE psprecomp PkgConfig::FFMPEG)
+if(ANDROID)
+    target_include_directories(emotionalsense PRIVATE ${FFMPEG_INCLUDE_DIRS})
+    target_link_libraries(emotionalsense PRIVATE psprecomp ${FFMPEG_LIBRARIES})
+else()
+    target_link_libraries(emotionalsense PRIVATE psprecomp PkgConfig::FFMPEG)
+endif()
 if(MSVC)
     target_compile_options(emotionalsense PRIVATE /W1)
 else()
@@ -53,7 +70,11 @@ if(NOT MSVC)
         -Wl,--wrap=psp_func_00055EF4
         -Wl,--build-id=sha1)
 endif()
-install(TARGETS emotionalsense RUNTIME DESTINATION bin)
+if(ANDROID)
+    install(TARGETS emotionalsense LIBRARY DESTINATION lib)
+else()
+    install(TARGETS emotionalsense RUNTIME DESTINATION bin)
+endif()
 
 # Bring-up aid: function trace on dispatch misses (slower).
 option(EMOTIONALSENSE_TRACE "Build the generated code with PSPRECOMP_TRACE" OFF)

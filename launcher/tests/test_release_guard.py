@@ -29,12 +29,16 @@ class Guard(unittest.TestCase):
     def test_artefact_names(self):
         for ok in ("EmotionalSense-P3-0.1.0-linux-x86_64.AppImage", "EmotionalSense-P3-0.1.0-linux-x86_64.tar.gz",
                    "EmotionalSense-P3-0.1.0-linux-aarch64.AppImage", "EmotionalSense-P3-0.1.0-linux-aarch64.tar.gz",
-                   "EmotionalSense-P3-0.1.0-windows-x86_64.zip", "EmotionalSense-P3-0.1.0-windows-arm64.zip"):
+                   "EmotionalSense-P3-0.1.0-windows-x86_64.zip", "EmotionalSense-P3-0.1.0-windows-arm64.zip",
+                   "EmotionalSense-P3-0.2.0-android-arm64.apk", "EmotionalSense-P3-0.2.0-android-x86_64.apk"):
             self.assertIsNone(guard.name_problem(Path("out") / ok), ok)
         self.assertIsNone(guard.name_problem(Path("out/emotionalsense-0.1.0-src.tar.gz")))
         self.assertTrue(guard.name_problem(Path("out/EmotionalSense-P3-0.1.0-x86_64.AppImage")))     # no system
         self.assertTrue(guard.name_problem(Path("out/EmotionalSense-P3-0.1.0-win64.zip")))           # old name
         self.assertTrue(guard.name_problem(Path("out/EmotionalSense-Launcher-x86_64.AppImage")))  # a stale name
+        self.assertTrue(guard.name_problem(Path("out/EmotionalSense-P3-0.2.0-android.apk")))       # missing arch
+        self.assertTrue(guard.name_problem(Path("out/EmotionalSense-P3-0.2.0-android-aarch64.apk")))  # wrong arch
+        self.assertTrue(guard.name_problem(Path("out/bad.apk")))                                   # missing prefix
 
     def test_help(self):
         self.assertEqual(guard.main(["--help"]), 0)
@@ -47,6 +51,30 @@ class Guard(unittest.TestCase):
                 f.writestr("ok/readme.txt", "x")
                 f.writestr("bad/djmax_funcs_00.c", "x")
             self.assertEqual(len(guard.violations(guard.listing(z))), 1)
+
+    def test_apk_listing(self):
+        with tempfile.TemporaryDirectory() as td:
+            clean = Path(td) / "EmotionalSense-P3-0.2.0-android-arm64.apk"
+            with zipfile.ZipFile(clean, "w") as f:
+                f.writestr("AndroidManifest.xml", "<manifest/>")
+                f.writestr("lib/arm64-v8a/libSDL2.so", "x")
+                f.writestr("lib/arm64-v8a/libpsprecomp.so", "x")
+            self.assertEqual(guard.violations(guard.listing(clean)), [])
+            self.assertEqual(guard.main([str(clean)]), 0)
+
+            bad = Path(td) / "bad.apk"
+            with zipfile.ZipFile(bad, "w") as f:
+                f.writestr("AndroidManifest.xml", "<manifest/>")
+                f.writestr("lib/arm64-v8a/libemotionalsense_game.so", "x")
+                f.writestr("assets/eboot.elf", "x")
+            hits = guard.violations(guard.listing(bad))
+            self.assertEqual(len(hits), 2)
+            self.assertEqual(guard.main([str(bad)]), 1)
+
+            bad_name = Path(td) / "EmotionalSense-P3-0.2.0-android.apk"
+            with zipfile.ZipFile(bad_name, "w") as f:
+                f.writestr("AndroidManifest.xml", "<manifest/>")
+            self.assertEqual(guard.main([str(bad_name)]), 1)
 
 
 if __name__ == "__main__":

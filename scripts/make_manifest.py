@@ -69,7 +69,8 @@ def build_manifest() -> dict:
     runtime = ["psprecomp/" + s for s in
                cmake_sources(ptxt, r"add_library\(psprecomp STATIC")]
     game = ["game/" + s for s in
-            cmake_sources(gtxt, r"add_executable\(emotionalsense")]
+            (cmake_sources(gtxt, r"set\(_game_srcs")
+             or cmake_sources(gtxt, r"add_executable\(emotionalsense"))]
     rtxt = (PSP / "tools" / "allegrexrecomp" / "CMakeLists.txt").read_text()
     recompiler = ["psprecomp/tools/allegrexrecomp/" + x for x in
                   cmake_sources(rtxt, r"add_library\(allegrex_core STATIC")

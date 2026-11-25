@@ -1,0 +1,448 @@
+import java.io.BufferedOutputStream
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
+import java.util.zip.GZIPOutputStream
+import java.util.zip.ZipFile
+
+plugins {
+    id("com.android.application")
+}
+
+val repoRoot = rootProject.projectDir.parentFile
+val stageRoot = File(repoRoot, "build-android/stage")
+val requestedAbis = providers.gradleProperty("androidAbis").orNull
+    ?.split(",")
+    ?.map { it.trim() }
+    ?.filter { it.isNotEmpty() }
+val availableAbis = listOf("x86_64", "arm64-v8a").filter { abi ->
+    File(stageRoot, "$abi/jniLibs/$abi").isDirectory &&
+        File(stageRoot, "$abi/kit/$abi").isDirectory
+}
+val supportedAbis = (requestedAbis ?: availableAbis).ifEmpty { listOf("x86_64") }
+
+val generatedKitAssetsDir = layout.buildDirectory.dir("generated/assets/kit")
+val generatedModuleAssetsDir = layout.buildDirectory.dir("generated/assets/gamemodule")
+
+val kitFormatStamp = "clang21-lld21-v3"
+
+fun computeKitVersionStamp(stageDir: File, abis: List<String>, formatStamp: String): String {
+    val md = MessageDigest.getInstance("SHA-256")
+    fun feedText(s: String) = md.update(s.toByteArray(StandardCharsets.UTF_8))
+    fun feedFile(label: String, file: File) {
+        feedText(label)
+        if (file.isFile) {
+            val buf = ByteArray(65536)
+            FileInputStream(file).use { fis ->
+                while (true) {
+                    val n = fis.read(buf)
+                    if (n <= 0) break
+                    md.update(buf, 0, n)
+                }
+            }
+        } else {
+            feedText("<missing>")
+        }
+    }
+    fun feedTree(prefix: String, dir: File) {
+        if (!dir.isDirectory) {
+            feedText("$prefix:<missing>")
+            return
+        }
+        dir.walkTopDown()
+            .filter { it.isFile }
+            .sortedBy { it.relativeTo(dir).invariantSeparatorsPath }
+            .forEach { f ->
+                val rel = f.relativeTo(dir).invariantSeparatorsPath
+                feedFile("$prefix/$rel", f)
+            }
+    }
+
+    feedText("format=$formatStamp")
+    for (abi in abis.sorted()) {
+        val kitDir = File(stageDir, "$abi/kit/$abi")
+        feedText("abi=$abi")
+        feedFile("$abi/kit_manifest.json", File(kitDir, "kit_manifest.json"))
+        feedFile("$abi/libpsprecomp.a", File(kitDir, "libpsprecomp.a"))
+        feedTree("$abi/objs", File(kitDir, "objs"))
+        feedTree("$abi/include", File(kitDir, "include"))
+    }
+    val shortHash = md.digest().joinToString("") { "%02x".format(it) }.take(12)
+    return "$formatStamp-$shortHash"
+}
+
+val kitVersionStamp = computeKitVersionStamp(stageRoot, supportedAbis, kitFormatStamp)
+
+fun readCmakeVersion(cmakeFile: File): String {
+    if (!cmakeFile.isFile) return "0.2.0"
+    val text = cmakeFile.readText(StandardCharsets.UTF_8)
+    val match = Regex("""project\(\s*emotionalsense\s+VERSION\s+([0-9]+\.[0-9]+\.[0-9]+)""").find(text)
+    return match?.groupValues?.get(1) ?: "0.2.0"
+}
+
+val cmakeVersion = readCmakeVersion(File(repoRoot, "CMakeLists.txt"))
+val resolvedVersionName = providers.gradleProperty("appVersionName").orNull
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?: cmakeVersion
+
+fun deriveVersionCode(version: String): Int {
+    val parts = version.substringBefore("-").split(".").mapNotNull { it.toIntOrNull() }
+    val major = parts.getOrElse(0) { 0 }
+    val minor = parts.getOrElse(1) { 0 }
+    val patch = parts.getOrElse(2) { 0 }
+    return maxOf(1, major * 10000 + minor * 100 + patch)
+}
+
+val resolvedVersionCode = providers.gradleProperty("appVersionCode").orNull
+    ?.trim()
+    ?.toIntOrNull()
+    ?: deriveVersionCode(resolvedVersionName)
+
+fun resolveSdkDir(root: File): File? {
+    val localProps = File(root, "local.properties")
+    if (localProps.isFile) {
+        val line = localProps.readLines(StandardCharsets.UTF_8)
+            .firstOrNull { it.trimStart().startsWith("sdk.dir=") }
+        if (line != null) {
+            val raw = line.substringAfter("=").trim().replace("\\\\", "\\")
+            val dir = File(raw)
+            if (dir.isDirectory) return dir
+        }
+    }
+    for (envName in listOf("ANDROID_HOME", "ANDROID_SDK_ROOT")) {
+        val envPath = System.getenv(envName)?.takeIf { it.isNotBlank() } ?: continue
+        val dir = File(envPath)
+        if (dir.isDirectory) return dir
+    }
+    val defaultSdk = File(System.getProperty("user.home"), "Android/Sdk")
+    return if (defaultSdk.isDirectory) defaultSdk else null
+}
+
+fun detectCompileSdk(sdkDir: File?): Int {
+    val platformsDir = sdkDir?.let { File(it, "platforms") }
+    if (platformsDir != null && platformsDir.isDirectory) {
+        val apiRegex = Regex("""^android-(\d+)(?:\.\d+)?$""")
+        val apis = platformsDir.listFiles()
+            ?.filter { it.isDirectory }
+            ?.mapNotNull { dir -> apiRegex.matchEntire(dir.name)?.groupValues?.get(1)?.toIntOrNull() }
+            ?.filter { it >= 36 }
+            ?: emptyList()
+        if (apis.isNotEmpty()) {
+            return apis.max()
+        }
+        if (File(platformsDir, "android-36").isDirectory) {
+            return 36
+        }
+    }
+    return 37
+}
+
+val resolvedCompileSdk = providers.gradleProperty("androidCompileSdk").orNull
+    ?.trim()
+    ?.toIntOrNull()
+    ?: detectCompileSdk(resolveSdkDir(rootProject.projectDir))
+
+val ksPath = System.getenv("ANDROID_KEYSTORE_PATH")?.takeIf { it.isNotBlank() }
+val ksPass = System.getenv("ANDROID_KEYSTORE_PASS")?.takeIf { it.isNotBlank() }
+val ksAlias = System.getenv("ANDROID_KEY_ALIAS")?.takeIf { it.isNotBlank() }
+val ksKeyPass = System.getenv("ANDROID_KEY_PASS")?.takeIf { it.isNotBlank() }
+val hasReleaseKeystore = ksPath != null && ksPass != null && ksAlias != null && ksKeyPass != null && File(ksPath).isFile
+
+android {
+    namespace = "io.emotionalsense.p3"
+    compileSdk = resolvedCompileSdk
+
+    defaultConfig {
+        applicationId = "io.emotionalsense.p3"
+        minSdk = 26
+        targetSdk = 36
+        versionCode = resolvedVersionCode
+        versionName = resolvedVersionName
+
+        ndk {
+            abiFilters += supportedAbis
+        }
+
+        buildConfigField("String", "GAME_MODULE_PACKAGE", "\"io.emotionalsense.p3.gamemodule\"")
+        buildConfigField("String", "KIT_FORMAT_STAMP", "\"$kitFormatStamp\"")
+        buildConfigField("String", "KIT_VERSION_STAMP", "\"$kitVersionStamp\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    androidResources {
+        noCompress += listOf("tgz", "bin")
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+            keepDebugSymbols += listOf("**/*.so")
+        }
+    }
+
+    sourceSets {
+        getByName("main") {
+            java.directories.add(File(stageRoot, "sdl-java").absolutePath)
+            jniLibs.directories.addAll(supportedAbis.map { File(stageRoot, "$it/jniLibs").absolutePath })
+            assets.directories.add(generatedKitAssetsDir.get().asFile.absolutePath)
+            assets.directories.add(generatedModuleAssetsDir.get().asFile.absolutePath)
+        }
+    }
+
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            create("release") {
+                storeFile = File(ksPath!!)
+                storePassword = ksPass
+                keyAlias = ksAlias
+                keyPassword = ksKeyPass
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+            signingConfig = if (hasReleaseKeystore) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
+        }
+    }
+}
+
+dependencies {
+    implementation("com.android.tools.build:apksig:9.1.1")
+}
+
+abstract class PackageKitTask : DefaultTask() {
+    @get:InputDirectory
+    abstract val stageDir: DirectoryProperty
+
+    @get:Input
+    abstract val abis: ListProperty<String>
+
+    @get:Input
+    abstract val kitVersion: Property<String>
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    private fun writeTarHeader(out: BufferedOutputStream, name: String, size: Long, isDir: Boolean, executable: Boolean) {
+        val hdr = ByteArray(512)
+        val nameBytes = name.toByteArray(StandardCharsets.UTF_8)
+        require(nameBytes.size <= 100) { "Tar path too long: $name" }
+        System.arraycopy(nameBytes, 0, hdr, 0, nameBytes.size)
+
+        val mode = if (isDir || executable) "0000755\u0000" else "0000644\u0000"
+        System.arraycopy(mode.toByteArray(StandardCharsets.US_ASCII), 0, hdr, 100, 8)
+        System.arraycopy("0000000\u0000".toByteArray(StandardCharsets.US_ASCII), 0, hdr, 108, 8)
+        System.arraycopy("0000000\u0000".toByteArray(StandardCharsets.US_ASCII), 0, hdr, 116, 8)
+
+        val sizeStr = String.format("%011o\u0000", if (isDir) 0L else size)
+        System.arraycopy(sizeStr.toByteArray(StandardCharsets.US_ASCII), 0, hdr, 124, 12)
+        System.arraycopy("00000000000\u0000".toByteArray(StandardCharsets.US_ASCII), 0, hdr, 136, 12)
+        for (i in 148 until 156) hdr[i] = ' '.code.toByte()
+        hdr[156] = if (isDir) '5'.code.toByte() else '0'.code.toByte()
+        System.arraycopy("ustar\u000000".toByteArray(StandardCharsets.US_ASCII), 0, hdr, 257, 8)
+
+        var csum = 0
+        for (b in hdr) csum += (b.toInt() and 0xFF)
+        val csumStr = String.format("%06o\u0000 ", csum)
+        System.arraycopy(csumStr.toByteArray(StandardCharsets.US_ASCII), 0, hdr, 148, 8)
+        out.write(hdr)
+    }
+
+    private fun addTree(out: BufferedOutputStream, baseDir: File, prefix: String, filter: (String) -> Boolean) {
+        val files = baseDir.walkTopDown()
+            .onEnter { dir ->
+                val rel = dir.relativeTo(baseDir).invariantSeparatorsPath
+                rel.isEmpty() || filter(rel)
+            }
+            .filter { f ->
+                val rel = f.relativeTo(baseDir).invariantSeparatorsPath
+                rel.isNotEmpty() && filter(rel)
+            }
+            .sortedBy { it.relativeTo(baseDir).invariantSeparatorsPath }
+            .toList()
+
+        val buf = ByteArray(65536)
+        for (f in files) {
+            val rel = f.relativeTo(baseDir).invariantSeparatorsPath
+            val arcName = if (prefix.isEmpty()) rel else "$prefix/$rel"
+            if (f.isDirectory) {
+                writeTarHeader(out, "$arcName/", 0L, isDir = true, executable = true)
+            } else if (f.isFile) {
+                if (arcName == "kit_manifest.json") {
+                    val rawText = f.readText(StandardCharsets.UTF_8).trimEnd()
+                    val patched = if (rawText.endsWith("}") && !rawText.contains("\"kit_version\"")) {
+                        val body = rawText.dropLast(1).trimEnd()
+                        val sep = if (body.endsWith("{")) "" else ","
+                        "$body$sep\n  \"kit_version\": \"${kitVersion.get()}\"\n}\n"
+                    } else {
+                        rawText + "\n"
+                    }
+                    val bytes = patched.toByteArray(StandardCharsets.UTF_8)
+                    val len = bytes.size.toLong()
+                    writeTarHeader(out, arcName, len, isDir = false, executable = false)
+                    out.write(bytes)
+                    val rem = ((512L - (len % 512L)) % 512L).toInt()
+                    if (rem > 0) {
+                        out.write(ByteArray(rem))
+                    }
+                } else {
+                    val len = f.length()
+                    writeTarHeader(out, arcName, len, isDir = false, executable = f.canExecute())
+                    FileInputStream(f).use { fis ->
+                        var left = len
+                        while (left > 0) {
+                            val n = fis.read(buf, 0, minOf(buf.size.toLong(), left).toInt())
+                            if (n <= 0) break
+                            out.write(buf, 0, n)
+                            left -= n
+                        }
+                    }
+                    val rem = (512 - (len % 512)) % 512
+                    if (rem > 0) {
+                        out.write(ByteArray(rem.toInt()))
+                    }
+                }
+            }
+        }
+    }
+
+    @TaskAction
+    fun run() {
+        val outBase = outputDir.get().asFile
+        outBase.mkdirs()
+        outBase.listFiles { f -> f.isFile && f.name.startsWith("kit-") && f.name.endsWith(".tgz") }
+            ?.forEach { it.delete() }
+
+        for (abi in abis.get()) {
+            val abiKit = File(stageDir.get().asFile, "$abi/kit/$abi")
+            if (!abiKit.isDirectory) {
+                logger.warn("Skipping kit packaging for missing ABI $abi")
+                continue
+            }
+            val outFile = File(outBase, "kit-$abi.tgz")
+            GZIPOutputStream(BufferedOutputStream(FileOutputStream(outFile))).use { gz ->
+                BufferedOutputStream(gz, 65536).use { tar ->
+                    addTree(tar, abiKit, "") { true }
+                    tar.write(ByteArray(1024))
+                }
+            }
+            logger.lifecycle("Packaged ${outFile.name} (${outFile.length() / 1024} KiB)")
+        }
+    }
+}
+
+abstract class BuildGameModuleManifestTask : DefaultTask() {
+    @get:Input
+    abstract val sdkDirPath: Property<String>
+
+    @get:Input
+    abstract val compileSdkVersion: Property<Int>
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun run() {
+        val sdk = File(sdkDirPath.get())
+        val buildToolsBase = File(sdk, "build-tools")
+        val aapt2 = buildToolsBase.listFiles()
+            ?.filter { it.isDirectory }
+            ?.sortedByDescending { it.name }
+            ?.map { File(it, "aapt2") }
+            ?.firstOrNull { it.canExecute() }
+            ?: error("aapt2 not found under ${buildToolsBase.absolutePath}")
+
+        val platformsBase = File(sdk, "platforms")
+        val androidJar = listOf(
+            File(platformsBase, "android-${compileSdkVersion.get()}/android.jar"),
+            File(platformsBase, "android-${compileSdkVersion.get()}.0/android.jar")
+        ).firstOrNull { it.isFile }
+            ?: platformsBase.listFiles()
+                ?.filter { it.isDirectory }
+                ?.sortedByDescending { it.name }
+                ?.map { File(it, "android.jar") }
+                ?.firstOrNull { it.isFile }
+            ?: error("android.jar not found under ${platformsBase.absolutePath}")
+
+        val tmpDir = temporaryDir
+        tmpDir.mkdirs()
+        val manifestXml = File(tmpDir, "AndroidManifest.xml")
+        manifestXml.writeText(
+            """
+            <?xml version="1.0" encoding="utf-8"?>
+            <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+                package="io.emotionalsense.p3.gamemodule"
+                android:versionCode="1"
+                android:versionName="1.0">
+                <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="36" />
+                <application
+                    android:hasCode="false"
+                    android:extractNativeLibs="true"
+                    android:label="EmotionalSense-P3 Game Module" />
+            </manifest>
+            """.trimIndent() + "\n"
+        )
+        val tmpApk = File(tmpDir, "module_manifest.apk")
+        val pb = ProcessBuilder(
+            aapt2.absolutePath, "link",
+            "--manifest", manifestXml.absolutePath,
+            "-I", androidJar.absolutePath,
+            "-o", tmpApk.absolutePath
+        )
+        pb.redirectErrorStream(true)
+        val proc = pb.start()
+        val out = proc.inputStream.bufferedReader().readText()
+        val rc = proc.waitFor()
+        if (rc != 0) {
+            error("aapt2 link failed ($rc): $out")
+        }
+
+        val outBase = outputDir.get().asFile
+        outBase.mkdirs()
+        val outBin = File(outBase, "gamemodule_manifest.bin")
+        ZipFile(tmpApk).use { zip ->
+            val entry = zip.getEntry("AndroidManifest.xml")
+                ?: error("AndroidManifest.xml missing in aapt2 output")
+            zip.getInputStream(entry).use { input ->
+                FileOutputStream(outBin).use { fos -> input.copyTo(fos) }
+            }
+        }
+        logger.lifecycle("Generated ${outBin.name} (${outBin.length()} bytes)")
+    }
+}
+
+val packageAndroidKit = tasks.register<PackageKitTask>("packageAndroidKit") {
+    stageDir.set(stageRoot)
+    abis.set(supportedAbis)
+    kitVersion.set(kitVersionStamp)
+    outputDir.set(generatedKitAssetsDir)
+}
+
+val buildGameModuleManifest = tasks.register<BuildGameModuleManifestTask>("buildGameModuleManifest") {
+    sdkDirPath.set(
+        androidComponents.sdkComponents.sdkDirectory.map { it.asFile.absolutePath }
+    )
+    compileSdkVersion.set(resolvedCompileSdk)
+    outputDir.set(generatedModuleAssetsDir)
+}
+
+tasks.named("preBuild") {
+    dependsOn(packageAndroidKit, buildGameModuleManifest)
+}

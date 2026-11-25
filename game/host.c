@@ -32,6 +32,21 @@
 #include <sys/stat.h>
 #include <time.h>
 
+#if defined(__ANDROID__) && defined(PSPRECOMP_SDL2)
+#  include <SDL_main.h>
+#  include <SDL_system.h>
+#endif
+#ifdef __ANDROID__
+#  include <jni.h>
+JNIEXPORT void JNICALL
+Java_io_emotionalsense_p3_GameActivity_nativeSetTouchState(
+        JNIEnv *env, jclass cls, jint buttons, jint lx, jint ly, jint triggers) {
+    (void)env;
+    (void)cls;
+    psp_window_set_touch_state((uint32_t)buttons, (uint8_t)lx, (uint8_t)ly, (uint32_t)triggers);
+}
+#endif
+
 #include "app_icon.h"
 #include "crash.h"
 #include "crash_scrub.h"
@@ -68,6 +83,10 @@ void djmax_score_set_dir(const char *dir);
 static void default_data_dir(char *out, size_t cap) {
     const char *env = getenv("EMOTIONALSENSE_DATA");
     if (env && *env) { snprintf(out, cap, "%s", env); return; }
+#if defined(__ANDROID__) && defined(PSPRECOMP_SDL2)
+    const char *internal = SDL_AndroidGetInternalStoragePath();
+    if (internal && *internal) { snprintf(out, cap, "%s", internal); return; }
+#endif
     host_default_data_dir(out, cap);
 }
 
@@ -858,4 +877,5 @@ int main(int argc, char **argv) {
     es_crash_flush();
     djmax_speed_flush();
     host_exit_now(0);
+    return 0;
 }

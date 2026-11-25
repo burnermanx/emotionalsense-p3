@@ -371,8 +371,66 @@ jobs:
           name: ${{ matrix.target }}
           path: out/EmotionalSense-P3-*
 
+  android:
+    name: android (arm64-v8a)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build python3 curl unzip xz-utils zstd binutils
+
+      - name: Android SDK components (API 36, build-tools 36.0.0, NDK 27.2.12479018)
+        run: |
+          set -eu
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018"
+
+      - name: Build Android native dependencies and kit (arm64-v8a)
+        run: ./scripts/android_build_deps.sh --abi arm64-v8a --ndk "$ANDROID_HOME/ndk/27.2.12479018" --api 26
+
+      - name: Build Android APK (arm64-v8a)
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASS: ${{ secrets.ANDROID_KEY_PASS }}
+        run: |
+          set -eu
+          if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "${RUNNER_TEMP}/release.keystore"
+            export ANDROID_KEYSTORE_PATH="${RUNNER_TEMP}/release.keystore"
+          fi
+          ./android/gradlew -p android assembleRelease -PandroidAbis=arm64-v8a -PandroidCompileSdk=36 --no-daemon
+
+      - name: Guard
+        run: |
+          set -eu
+          version=$(sed -n 's/^project(emotionalsense VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          apk=$(find android/app/build/outputs/apk/release -maxdepth 1 -name '*.apk' | head -n 1)
+          test -n "$apk"
+          mkdir -p out
+          cp "$apk" "out/EmotionalSense-P3-$version-android-arm64.apk"
+          python3 scripts/release_guard.py "out/EmotionalSense-P3-$version-android-arm64.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-arm64
+          path: out/EmotionalSense-P3-*
+
   publish:
-    needs: [source, linux, windows]
+    needs: [source, linux, windows, android]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -386,12 +444,13 @@ jobs:
           set -eu
           mkdir -p release
           cp parts/source/*.tar.gz release/
-          for t in linux-x86_64 linux-aarch64 windows-x86_64 windows-arm64; do
+          for t in linux-x86_64 linux-aarch64 windows-x86_64 windows-arm64 android-arm64; do
             cp parts/$t/EmotionalSense-P3-* release/
           done
-          # the six packages, the two .zsync of the AppImages and nothing else of this shape
-          test "$(ls release/EmotionalSense-P3-* | wc -l)" = 8
+          # the six PC packages, the two .zsync of the AppImages, the Android APK and nothing else of this shape
+          test "$(ls release/EmotionalSense-P3-* | wc -l)" = 9
           test "$(ls release/*.AppImage.zsync | wc -l)" = 2
+          test "$(ls release/*.apk | wc -l)" = 1
           python3 scripts/release_guard.py release/*
           (cd release && sha256sum * > SHA256SUMS)
           cat release/SHA256SUMS

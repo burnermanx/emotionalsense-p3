@@ -3,7 +3,7 @@
 
     release_guard.py [-h|--help] <artefact> [<artefact> ...]
 
-An artefact is a directory, a .zip, a .tar/.tar.gz/.tar.xz or an .AppImage
+An artefact is a directory, a .zip, a .apk, a .tar/.tar.gz/.tar.xz or an .AppImage
 (listed with `unsquashfs -o <offset> -l`, never executed;
 needs squashfs-tools). The list of what is inside is
 printed, then checked against names that only exist because of the game:
@@ -12,12 +12,13 @@ EBOOT, ICON0.PNG, PARAM.SFO, UMD_DATA.BIN), saves (SD.BIN), the prepared
 game binary and its static library, and the data folders the launcher creates
 (disc/, module/, ms/, gen/). Exit status 1 on any hit.
 
-A packaged .AppImage, .zip or .tar.gz must also be named
+A packaged .AppImage, .zip, .tar.gz or .apk must also be named
 EmotionalSense-P3-<version>-<system>-<arch>.<ext> with system windows|linux and arch
-x86_64|arm64|aarch64 (the product's display name); anything else is reported as a failure,
-so a stale artefact name cannot reach a release. (The source tarball, ...-src.tar.gz, and
-the pspdecrypt source are not "packaged" artefacts and are not passed to this guard by name
-rules; they are listed like the rest.)
+x86_64|arm64|aarch64, or EmotionalSense-P3-<version>-android-<arm64|x86_64>.apk (the
+product's display name); anything else is reported as a failure, so a stale artefact
+name cannot reach a release. (The source tarball, ...-src.tar.gz, and the pspdecrypt
+source are not "packaged" artefacts and are not passed to this guard by name rules; they
+are listed like the rest.)
 """
 
 import fnmatch
@@ -34,7 +35,8 @@ FORBIDDEN_NAMES = [
     "djmax_*.c", "djmax_*.h", "*.elf", "*.prx", "*.tpa", "*.pbp", "*.iso", "*.cso",
     "eboot.bin", "eboot.pbp", "icon0.png", "icon1.pmf", "pic0.png", "pic1.png",
     "param.sfo", "umd_data.bin", "sd.bin", "data.tpa", "snd0.at3",
-    "emotionalsense", "emotionalsense.exe", "emotionalsense-p3-game", "emotionalsense-p3-game.exe", "libpsprecomp.a", "prepared.json",
+    "emotionalsense", "emotionalsense.exe", "emotionalsense-p3-game", "emotionalsense-p3-game.exe",
+    "libemotionalsense_game.so", "libpsprecomp.a", "prepared.json",
 ]
 FORBIDDEN_DIRS = ["disc", "module", "ms", "gen", "savedata", "psp_game"]
 
@@ -81,7 +83,7 @@ def listing(path: Path):
         for r, ds, fs in os.walk(path):
             for n in ds + fs:
                 yield str((Path(r) / n).relative_to(path)).replace(os.sep, "/")
-    elif p.endswith(".zip"):
+    elif p.endswith((".zip", ".apk")):
         with zipfile.ZipFile(path) as z:
             yield from z.namelist()
     elif re.search(r"\.(tar|tar\.gz|tgz|tar\.xz|tar\.bz2)$", p):
@@ -111,18 +113,23 @@ def violations(names):
 
 
 PRODUCT_PREFIX = "EmotionalSense-P3-"
-PACKAGE_NAME = re.compile(r"^EmotionalSense-P3-\d+\.\d+\.\d+-(windows|linux)-(x86_64|arm64|aarch64)\.(AppImage|zip|tar\.gz)$")
+PACKAGE_NAME = re.compile(
+    r"^EmotionalSense-P3-\d+\.\d+\.\d+-("
+    r"(windows|linux)-(x86_64|arm64|aarch64)\.(AppImage|zip|tar\.gz)"
+    r"|android-(arm64|x86_64)\.apk"
+    r")$"
+)
 
 
 def name_problem(path: Path):
     """The release name of a packaged artefact, or None when it is fine."""
     n = path.name
-    if n.endswith((".AppImage", ".zip")) and not n.startswith(PRODUCT_PREFIX):
+    if n.endswith((".AppImage", ".zip", ".apk")) and not n.startswith(PRODUCT_PREFIX):
         return f"artefact name must start with {PRODUCT_PREFIX}"
-    if n.startswith(PRODUCT_PREFIX) and n.endswith((".AppImage", ".zip", ".tar.gz")) and not n.endswith("-src.tar.gz") \
-            and not PACKAGE_NAME.match(n):
+    if n.startswith(PRODUCT_PREFIX) and n.endswith((".AppImage", ".zip", ".tar.gz", ".apk")) \
+            and not n.endswith("-src.tar.gz") and not PACKAGE_NAME.match(n):
         return ("package name must be EmotionalSense-P3-<version>-<windows|linux>-<x86_64|arm64|aarch64>."
-                "<AppImage|zip|tar.gz>")
+                "<AppImage|zip|tar.gz> or EmotionalSense-P3-<version>-android-<arm64|x86_64>.apk")
     return None
 
 

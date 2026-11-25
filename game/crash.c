@@ -43,7 +43,7 @@
 #  include <sys/utsname.h>
 #  include <ucontext.h>
 #  include <unistd.h>
-#  if defined(__GLIBC__)
+#  if defined(__GLIBC__) && !defined(__ANDROID__)
 #    include <execinfo.h>
 #  endif
 #endif
@@ -616,7 +616,7 @@ static void on_signal(int sig, siginfo_t *si, void *uc) {
                      : sig == SIGFPE ? "fpe" : "abort";
     void *frames[64];
     int nf = 0;
-#if defined(__GLIBC__)
+#if defined(__GLIBC__) && !defined(__ANDROID__)
     nf = backtrace(frames, 64);
 #endif
     char det[48];
@@ -639,7 +639,7 @@ static void guest_miss(uint32_t addr) {
         snprintf(det, sizeof det, "indirect call to 0x%08x which is not a recompiled function", (unsigned)addr);
         void *frames[64];
         int nf = 0;
-#if defined(__GLIBC__) && !defined(_WIN32)
+#if defined(__GLIBC__) && !defined(_WIN32) && !defined(__ANDROID__)
         nf = backtrace(frames, 64);
 #elif defined(_WIN32)
         nf = (int)RtlCaptureStackBackTrace(0, 62, frames, NULL);
@@ -738,7 +738,7 @@ void es_crash_init(const char *data) {
     if (wt) CloseHandle(wt);
 #else
     dl_iterate_phdr(phdr_cb, NULL);
-#if defined(__GLIBC__)
+#if defined(__GLIBC__) && !defined(__ANDROID__)
     { void *warm[2]; backtrace(warm, 2); }          /* load libgcc now, not inside a handler */
 #endif
     static char altstack[1 << 16];
