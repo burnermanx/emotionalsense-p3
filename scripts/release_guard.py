@@ -12,12 +12,13 @@ EBOOT, ICON0.PNG, PARAM.SFO, UMD_DATA.BIN), saves (SD.BIN), the prepared
 game binary and its static library, and the data folders the launcher creates
 (disc/, module/, ms/, gen/). Exit status 1 on any hit.
 
-A packaged .AppImage, .zip or .tar.gz must also be named
+A packaged .AppImage, .zip, .tar.gz or .apk must also be named
 EmotionalSense-P3-<version>-<system>-<arch>.<ext> with system windows|linux and arch
-x86_64|arm64|aarch64 (the product's display name); anything else is reported as a failure,
-so a stale artefact name cannot reach a release. (The source tarball, ...-src.tar.gz, and
-the pspdecrypt source are not "packaged" artefacts and are not passed to this guard by name
-rules; they are listed like the rest.)
+x86_64|arm64|aarch64, or EmotionalSense-P3-<version>-android-<arm64|x86_64>.apk (the
+product's display name); anything else is reported as a failure, so a stale artefact
+name cannot reach a release. (The source tarball, ...-src.tar.gz, and the pspdecrypt
+source are not "packaged" artefacts and are not passed to this guard by name rules; they
+are listed like the rest.)
 """
 
 import fnmatch
@@ -112,18 +113,23 @@ def violations(names):
 
 
 PRODUCT_PREFIX = "EmotionalSense-P3-"
-PACKAGE_NAME = re.compile(r"^EmotionalSense-P3-\d+\.\d+\.\d+-(windows|linux)-(x86_64|arm64|aarch64)\.(AppImage|zip|tar\.gz)$")
+PACKAGE_NAME = re.compile(
+    r"^EmotionalSense-P3-\d+\.\d+\.\d+-("
+    r"(windows|linux)-(x86_64|arm64|aarch64)\.(AppImage|zip|tar\.gz)"
+    r"|android-(arm64|x86_64)\.apk"
+    r")$"
+)
 
 
 def name_problem(path: Path):
     """The release name of a packaged artefact, or None when it is fine."""
     n = path.name
-    if n.endswith((".AppImage", ".zip")) and not n.startswith(PRODUCT_PREFIX):
+    if n.endswith((".AppImage", ".zip", ".apk")) and not n.startswith(PRODUCT_PREFIX):
         return f"artefact name must start with {PRODUCT_PREFIX}"
-    if n.startswith(PRODUCT_PREFIX) and n.endswith((".AppImage", ".zip", ".tar.gz")) and not n.endswith("-src.tar.gz") \
-            and not PACKAGE_NAME.match(n):
+    if n.startswith(PRODUCT_PREFIX) and n.endswith((".AppImage", ".zip", ".tar.gz", ".apk")) \
+            and not n.endswith("-src.tar.gz") and not PACKAGE_NAME.match(n):
         return ("package name must be EmotionalSense-P3-<version>-<windows|linux>-<x86_64|arm64|aarch64>."
-                "<AppImage|zip|tar.gz>")
+                "<AppImage|zip|tar.gz> or EmotionalSense-P3-<version>-android-<arm64|x86_64>.apk")
     return None
 
 

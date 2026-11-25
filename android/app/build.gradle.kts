@@ -75,16 +75,92 @@ fun computeKitVersionStamp(stageDir: File, abis: List<String>, formatStamp: Stri
 
 val kitVersionStamp = computeKitVersionStamp(stageRoot, supportedAbis, kitFormatStamp)
 
+fun readCmakeVersion(cmakeFile: File): String {
+    if (!cmakeFile.isFile) return "0.2.0"
+    val text = cmakeFile.readText(StandardCharsets.UTF_8)
+    val match = Regex("""project\(\s*emotionalsense\s+VERSION\s+([0-9]+\.[0-9]+\.[0-9]+)""").find(text)
+    return match?.groupValues?.get(1) ?: "0.2.0"
+}
+
+val cmakeVersion = readCmakeVersion(File(repoRoot, "CMakeLists.txt"))
+val resolvedVersionName = providers.gradleProperty("appVersionName").orNull
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?: cmakeVersion
+
+fun deriveVersionCode(version: String): Int {
+    val parts = version.substringBefore("-").split(".").mapNotNull { it.toIntOrNull() }
+    val major = parts.getOrElse(0) { 0 }
+    val minor = parts.getOrElse(1) { 0 }
+    val patch = parts.getOrElse(2) { 0 }
+    return maxOf(1, major * 10000 + minor * 100 + patch)
+}
+
+val resolvedVersionCode = providers.gradleProperty("appVersionCode").orNull
+    ?.trim()
+    ?.toIntOrNull()
+    ?: deriveVersionCode(resolvedVersionName)
+
+fun resolveSdkDir(root: File): File? {
+    val localProps = File(root, "local.properties")
+    if (localProps.isFile) {
+        val line = localProps.readLines(StandardCharsets.UTF_8)
+            .firstOrNull { it.trimStart().startsWith("sdk.dir=") }
+        if (line != null) {
+            val raw = line.substringAfter("=").trim().replace("\\\\", "\\")
+            val dir = File(raw)
+            if (dir.isDirectory) return dir
+        }
+    }
+    for (envName in listOf("ANDROID_HOME", "ANDROID_SDK_ROOT")) {
+        val envPath = System.getenv(envName)?.takeIf { it.isNotBlank() } ?: continue
+        val dir = File(envPath)
+        if (dir.isDirectory) return dir
+    }
+    val defaultSdk = File(System.getProperty("user.home"), "Android/Sdk")
+    return if (defaultSdk.isDirectory) defaultSdk else null
+}
+
+fun detectCompileSdk(sdkDir: File?): Int {
+    val platformsDir = sdkDir?.let { File(it, "platforms") }
+    if (platformsDir != null && platformsDir.isDirectory) {
+        val apiRegex = Regex("""^android-(\d+)(?:\.\d+)?$""")
+        val apis = platformsDir.listFiles()
+            ?.filter { it.isDirectory }
+            ?.mapNotNull { dir -> apiRegex.matchEntire(dir.name)?.groupValues?.get(1)?.toIntOrNull() }
+            ?.filter { it >= 36 }
+            ?: emptyList()
+        if (apis.isNotEmpty()) {
+            return apis.max()
+        }
+        if (File(platformsDir, "android-36").isDirectory) {
+            return 36
+        }
+    }
+    return 37
+}
+
+val resolvedCompileSdk = providers.gradleProperty("androidCompileSdk").orNull
+    ?.trim()
+    ?.toIntOrNull()
+    ?: detectCompileSdk(resolveSdkDir(rootProject.projectDir))
+
+val ksPath = System.getenv("ANDROID_KEYSTORE_PATH")?.takeIf { it.isNotBlank() }
+val ksPass = System.getenv("ANDROID_KEYSTORE_PASS")?.takeIf { it.isNotBlank() }
+val ksAlias = System.getenv("ANDROID_KEY_ALIAS")?.takeIf { it.isNotBlank() }
+val ksKeyPass = System.getenv("ANDROID_KEY_PASS")?.takeIf { it.isNotBlank() }
+val hasReleaseKeystore = ksPath != null && ksPass != null && ksAlias != null && ksKeyPass != null && File(ksPath).isFile
+
 android {
     namespace = "io.emotionalsense.p3"
-    compileSdk = 37
+    compileSdk = resolvedCompileSdk
 
     defaultConfig {
         applicationId = "io.emotionalsense.p3"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.2.0-dev"
+        versionCode = resolvedVersionCode
+        versionName = resolvedVersionName
 
         ndk {
             abiFilters += supportedAbis
@@ -124,9 +200,25 @@ android {
         }
     }
 
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            create("release") {
+                storeFile = File(ksPath!!)
+                storePassword = ksPass
+                keyAlias = ksAlias
+                keyPassword = ksKeyPass
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = if (hasReleaseKeystore) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }
@@ -347,7 +439,7 @@ val buildGameModuleManifest = tasks.register<BuildGameModuleManifestTask>("build
     sdkDirPath.set(
         androidComponents.sdkComponents.sdkDirectory.map { it.asFile.absolutePath }
     )
-    compileSdkVersion.set(37)
+    compileSdkVersion.set(resolvedCompileSdk)
     outputDir.set(generatedModuleAssetsDir)
 }
 
