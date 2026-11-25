@@ -177,7 +177,21 @@ jobs:
           mkdir -p dl
           cd dl
           get() { curl -fsSL -o "$1" "$2"; echo "$3  $1" | sha256sum -c -; }
-          get zig.tar.xz "https://ziglang.org/download/${ZIG_VERSION}/zig-${{ matrix.zig_host }}-linux-${ZIG_VERSION}.tar.xz" "$ZIG_SHA"
+          # zig: ziglang.org can stall for many minutes (it asks automated downloads to use the community
+          # mirrors, https://ziglang.org/download/community-mirrors.txt). Each source has a time limit; the
+          # pinned SHA-256 decides, so a mirror cannot change the file.
+          zig_file="zig-${{ matrix.zig_host }}-linux-${ZIG_VERSION}.tar.xz"
+          ok=""
+          for base in https://pkg.hexops.org/zig https://pkg.earth/zig https://zig.linus.dev/zig \
+                      "https://ziglang.org/download/${ZIG_VERSION}"; do
+            echo "zig from $base"
+            if curl -fsSL --connect-timeout 20 --max-time 300 -o zig.tar.xz "$base/$zig_file" \
+               && echo "$ZIG_SHA  zig.tar.xz" | sha256sum -c -; then
+              ok=1; break
+            fi
+            rm -f zig.tar.xz
+          done
+          [ -n "$ok" ] || { echo "::error::zig $ZIG_VERSION from no source matched its SHA-256"; exit 1; }
           get ffmpeg-linux.tar.xz "https://github.com/BtbN/FFmpeg-Builds/releases/download/${FFMPEG_TAG}/ffmpeg-${FFMPEG_BUILD}-${{ matrix.ffmpeg_asset }}-lgpl-shared-8.1.tar.xz" "$FFMPEG_SHA"
           curl -fsSL -o appimagetool "https://github.com/AppImage/appimagetool/releases/download/continuous/${{ matrix.appimagetool }}"
           chmod +x appimagetool
