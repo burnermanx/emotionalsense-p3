@@ -8,6 +8,8 @@ import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
+import kotlin.math.cos
+import kotlin.math.sin
 
 class TouchControlsOverlay @JvmOverloads constructor(
     context: Context,
@@ -33,7 +35,8 @@ class TouchControlsOverlay @JvmOverloads constructor(
         BUTTON,
         ANALOG_LEFT,
         ANALOG_RIGHT,
-        TOGGLE_VISIBILITY
+        TOGGLE_VISIBILITY,
+        OPEN_SETTINGS
     }
 
     private data class Control(
@@ -48,7 +51,9 @@ class TouchControlsOverlay @JvmOverloads constructor(
     )
 
     var onStateChanged: ((buttons: Int, lx: Int, ly: Int, triggers: Int) -> Unit)? = null
+    var onSettingsClicked: (() -> Unit)? = null
 
+    private var padEnabled = true
     private var controlsHidden = false
     private val activePointers = HashMap<Int, String>()
     private var lastButtons = -1
@@ -71,14 +76,27 @@ class TouchControlsOverlay @JvmOverloads constructor(
         Control("CIR", "○", Action.BUTTON, PSP_CTRL_CIRCLE, Color.parseColor("#F06A6A"), isRound = true),
         Control("CRO", "✕", Action.BUTTON, PSP_CTRL_CROSS, Color.parseColor("#6BA8FF"), isRound = true),
         Control("SQU", "□", Action.BUTTON, PSP_CTRL_SQUARE, Color.parseColor("#D678E8"), isRound = true),
-        Control("TOGGLE", "PAD", Action.TOGGLE_VISIBILITY, 0, Color.LTGRAY, isRound = false)
+        Control("TOGGLE", "PAD", Action.TOGGLE_VISIBILITY, 0, Color.LTGRAY, isRound = false),
+        Control("SETTINGS", "⚙", Action.OPEN_SETTINGS, 0, Color.LTGRAY, isRound = false)
     )
 
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+    private val gearPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textAlign = Paint.Align.CENTER
         isFakeBoldText = true
+    }
+
+    fun setPadEnabled(enabled: Boolean) {
+        if (padEnabled == enabled) return
+        padEnabled = enabled
+        if (!enabled) {
+            activePointers.clear()
+            emitState()
+        }
+        layoutControls(width.toFloat(), height.toFloat())
+        invalidate()
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -98,8 +116,16 @@ class TouchControlsOverlay @JvmOverloads constructor(
             c.hitRect.set(c.rect.left - pad, c.rect.top - pad, c.rect.right + pad, c.rect.bottom + pad)
         }
 
-        // Top-center visibility toggle
-        setControl("TOGGLE", w / 2f, margin + unit * 0.35f, unit * 1.45f, unit * 0.65f, unit * 0.12f)
+        // Top-center visibility toggle + settings gear
+        val topY = margin + unit * 0.35f
+        val topH = unit * 0.65f
+        if (padEnabled) {
+            setControl("TOGGLE", w / 2f - unit * 0.45f, topY, unit * 1.35f, topH, unit * 0.12f)
+            setControl("SETTINGS", w / 2f + unit * 0.66f, topY, unit * 0.72f, topH, unit * 0.12f)
+        } else {
+            setControl("TOGGLE", -1000f, -1000f, 0f, 0f, 0f)
+            setControl("SETTINGS", w / 2f, topY, unit * 0.78f, topH, unit * 0.14f)
+        }
 
         // Shoulders + Select/Start
         val shW = unit * 2.1f
@@ -139,6 +165,12 @@ class TouchControlsOverlay @JvmOverloads constructor(
         setControl("CIR", fCx + fStep, fCy, fSize, fSize)
     }
 
+    private fun isControlVisible(c: Control): Boolean {
+        if (!padEnabled) return c.action == Action.OPEN_SETTINGS
+        if (controlsHidden) return c.action == Action.TOGGLE_VISIBILITY || c.action == Action.OPEN_SETTINGS
+        return true
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val pressedIds = activePointers.values.toSet()
@@ -146,11 +178,13 @@ class TouchControlsOverlay @JvmOverloads constructor(
         strokePaint.strokeWidth = (unit * 0.045f).coerceAtLeast(2f)
 
         for (c in controls) {
-            if (controlsHidden && c.action != Action.TOGGLE_VISIBILITY) continue
+            if (!isControlVisible(c)) continue
             val pressed = c.id in pressedIds
+            val isTopBar = c.action == Action.TOGGLE_VISIBILITY || c.action == Action.OPEN_SETTINGS
             val baseAlpha = when {
-                c.action == Action.TOGGLE_VISIBILITY && controlsHidden -> 55
-                c.action == Action.TOGGLE_VISIBILITY -> 90
+                isTopBar && pressed -> 150
+                isTopBar && (!padEnabled || controlsHidden) -> 55
+                isTopBar -> 90
                 pressed -> 135
                 else -> 42
             }
@@ -161,7 +195,7 @@ class TouchControlsOverlay @JvmOverloads constructor(
                 Color.blue(c.accentColor)
             )
             strokePaint.color = Color.argb(
-                if (pressed) 220 else if (controlsHidden) 95 else 140,
+                if (pressed) 220 else if (isTopBar && (!padEnabled || controlsHidden)) 95 else 140,
                 Color.red(c.accentColor),
                 Color.green(c.accentColor),
                 Color.blue(c.accentColor)
@@ -176,22 +210,39 @@ class TouchControlsOverlay @JvmOverloads constructor(
                 canvas.drawRoundRect(c.rect, corner, corner, strokePaint)
             }
 
-            textPaint.color = Color.argb(if (pressed) 255 else 200, 255, 255, 255)
-            textPaint.textSize = minOf(c.rect.height() * 0.44f, unit * 0.48f)
-            val label = if (c.action == Action.TOGGLE_VISIBILITY && controlsHidden) "SHOW" else c.label
-            val baseline = c.rect.centerY() - (textPaint.descent() + textPaint.ascent()) / 2f
-            canvas.drawText(label, c.rect.centerX(), baseline, textPaint)
+            if (c.action == Action.OPEN_SETTINGS) {
+                drawGearIcon(canvas, c.rect.centerX(), c.rect.centerY(), minOf(c.rect.width(), c.rect.height()) * 0.28f, pressed)
+            } else {
+                textPaint.color = Color.argb(if (pressed) 255 else 200, 255, 255, 255)
+                textPaint.textSize = minOf(c.rect.height() * 0.44f, unit * 0.48f)
+                val label = if (c.action == Action.TOGGLE_VISIBILITY && controlsHidden) "SHOW" else c.label
+                val baseline = c.rect.centerY() - (textPaint.descent() + textPaint.ascent()) / 2f
+                canvas.drawText(label, c.rect.centerX(), baseline, textPaint)
+            }
+        }
+    }
+
+    private fun drawGearIcon(canvas: Canvas, cx: Float, cy: Float, radius: Float, pressed: Boolean) {
+        val alpha = if (pressed) 255 else if (!padEnabled || controlsHidden) 170 else 210
+        gearPaint.color = Color.argb(alpha, 255, 255, 255)
+        gearPaint.strokeWidth = (radius * 0.28f).coerceAtLeast(2f)
+        gearPaint.strokeCap = Paint.Cap.ROUND
+        canvas.drawCircle(cx, cy, radius * 0.56f, gearPaint)
+        val inner = radius * 0.68f
+        val outer = radius * 1.05f
+        for (i in 0 until 8) {
+            val angle = i * (Math.PI / 4.0)
+            val cosA = cos(angle).toFloat()
+            val sinA = sin(angle).toFloat()
+            canvas.drawLine(cx + inner * cosA, cy + inner * sinA, cx + outer * cosA, cy + outer * sinA, gearPaint)
         }
     }
 
     private fun hitTest(x: Float, y: Float): Control? {
-        if (controlsHidden) {
-            val toggle = controls.first { it.action == Action.TOGGLE_VISIBILITY }
-            return if (toggle.hitRect.contains(x, y)) toggle else null
-        }
         var best: Control? = null
         var bestDist = Float.MAX_VALUE
         for (c in controls) {
+            if (!isControlVisible(c)) continue
             if (c.hitRect.contains(x, y)) {
                 val dx = x - c.rect.centerX()
                 val dy = y - c.rect.centerY()
@@ -207,7 +258,7 @@ class TouchControlsOverlay @JvmOverloads constructor(
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         val action = event.actionMasked
-        if (controlsHidden && action == MotionEvent.ACTION_DOWN) {
+        if ((!padEnabled || controlsHidden) && action == MotionEvent.ACTION_DOWN) {
             val hit = hitTest(event.getX(0), event.getY(0))
             if (hit == null) return false
         }
@@ -229,12 +280,15 @@ class TouchControlsOverlay @JvmOverloads constructor(
                 }
             }
             MotionEvent.ACTION_MOVE -> {
-                if (!controlsHidden) {
-                    for (i in 0 until event.pointerCount) {
-                        val pid = event.getPointerId(i)
-                        if (activePointers[pid] == "TOGGLE") continue
-                        val hit = hitTest(event.getX(i), event.getY(i))
-                        if (hit != null && hit.action != Action.TOGGLE_VISIBILITY) {
+                for (i in 0 until event.pointerCount) {
+                    val pid = event.getPointerId(i)
+                    val cur = activePointers[pid]
+                    if (cur == "TOGGLE") continue
+                    val hit = hitTest(event.getX(i), event.getY(i))
+                    if (cur == "SETTINGS") {
+                        if (hit?.id != "SETTINGS") activePointers.remove(pid)
+                    } else if (padEnabled && !controlsHidden) {
+                        if (hit != null && hit.action != Action.TOGGLE_VISIBILITY && hit.action != Action.OPEN_SETTINGS) {
                             activePointers[pid] = hit.id
                         } else {
                             activePointers.remove(pid)
@@ -244,7 +298,17 @@ class TouchControlsOverlay @JvmOverloads constructor(
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
                 val idx = event.actionIndex
-                activePointers.remove(event.getPointerId(idx))
+                val pid = event.getPointerId(idx)
+                val prevId = activePointers.remove(pid)
+                if (prevId == "SETTINGS") {
+                    val hit = hitTest(event.getX(idx), event.getY(idx))
+                    if (hit?.id == "SETTINGS") {
+                        emitState()
+                        invalidate()
+                        onSettingsClicked?.invoke()
+                        return true
+                    }
+                }
             }
             MotionEvent.ACTION_CANCEL -> {
                 activePointers.clear()
@@ -266,14 +330,16 @@ class TouchControlsOverlay @JvmOverloads constructor(
         var buttons = 0
         var aLeft = false
         var aRight = false
-        val activeIds = activePointers.values.toSet()
-        for (c in controls) {
-            if (c.id !in activeIds) continue
-            when (c.action) {
-                Action.BUTTON -> buttons = buttons or c.bit
-                Action.ANALOG_LEFT -> aLeft = true
-                Action.ANALOG_RIGHT -> aRight = true
-                Action.TOGGLE_VISIBILITY -> {}
+        if (padEnabled && !controlsHidden) {
+            val activeIds = activePointers.values.toSet()
+            for (c in controls) {
+                if (c.id !in activeIds) continue
+                when (c.action) {
+                    Action.BUTTON -> buttons = buttons or c.bit
+                    Action.ANALOG_LEFT -> aLeft = true
+                    Action.ANALOG_RIGHT -> aRight = true
+                    Action.TOGGLE_VISIBILITY, Action.OPEN_SETTINGS -> {}
+                }
             }
         }
         val lx = when {

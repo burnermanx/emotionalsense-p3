@@ -15,7 +15,7 @@ import java.util.zip.GZIPInputStream
 
 object RecompPipeline {
 
-    private const val KIT_FORMAT_STAMP = "clang21-lld21-v3"
+    private const val KIT_FORMAT_STAMP = BuildConfig.KIT_FORMAT_STAMP
 
     data class AbiInfo(
         val abi: String,
@@ -56,7 +56,7 @@ object RecompPipeline {
         val abiInfo = detectAbi(context)
         val kitDir = File(context.filesDir, "kit")
         val stampFile = File(kitDir, ".kit_stamp")
-        val expectedStamp = "${BuildConfig.VERSION_NAME}-${BuildConfig.VERSION_CODE}-${abiInfo.abi}-$KIT_FORMAT_STAMP"
+        val expectedStamp = "${abiInfo.abi}-${BuildConfig.KIT_VERSION_STAMP}"
 
         val manifestFile = File(kitDir, "kit_manifest.json")
         val clangResDir = File(kitDir, "clang-res")
@@ -501,17 +501,21 @@ object RecompPipeline {
             throw IOException("Failed to rename ${tmpSo.absolutePath} to ${outSo.absolutePath}")
         }
 
+        val soSha = ModuleState.sha256File(outSo)
+        val state = ModuleState.recordPrepared(context, outSo, soSha)
+
         val prepared = JSONObject()
-            .put("version", "${BuildConfig.VERSION_NAME}-${BuildConfig.VERSION_CODE}-$KIT_FORMAT_STAMP")
+            .put("version", BuildConfig.KIT_VERSION_STAMP)
+            .put("module_version_code", state.preparedVersionCode)
             .put("abi", abiInfo.abi)
             .put("disc_id", extractResult.discId)
             .put("iso_sha256", extractResult.sha256)
             .put("so_size", outSo.length())
-            .put("so_sha256", sha256Hex(outSo.readBytes()))
+            .put("so_sha256", soSha)
         File(dataDir, "prepared.json").writeText(prepared.toString(2))
 
         progress(1.0f, "Ready")
-        log("Built ${outSo.absolutePath} (${outSo.length() / (1024 * 1024)} MiB)")
+        log("Built ${outSo.absolutePath} (${outSo.length() / (1024 * 1024)} MiB, v${state.preparedVersionCode})")
         return outSo
     }
 

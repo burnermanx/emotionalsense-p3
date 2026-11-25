@@ -4,8 +4,6 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
-import android.content.pm.PackageManager
-import android.os.Build
 import com.android.apksig.ApkSigner
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -16,6 +14,8 @@ import java.io.FilterOutputStream
 import java.io.IOException
 import java.io.OutputStream
 import java.math.BigInteger
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.security.KeyFactory
 import java.security.KeyPairGenerator
 import java.security.PrivateKey
@@ -49,40 +49,50 @@ object GameModulePackager {
     }
 
     fun getInstalledModuleSo(context: Context): File? {
-        return try {
-            val info = if (Build.VERSION.SDK_INT >= 33) {
-                context.packageManager.getApplicationInfo(
-                    MODULE_PACKAGE,
-                    PackageManager.ApplicationInfoFlags.of(0)
-                )
-            } else {
-                @Suppress("DEPRECATION")
-                context.packageManager.getApplicationInfo(MODULE_PACKAGE, 0)
-            }
-            val so = File(info.nativeLibraryDir, "libemotionalsense_game.so")
-            if (so.isFile) so else null
-        } catch (_: PackageManager.NameNotFoundException) {
-            null
-        }
+        return ModuleState.getSystemModuleInfo(context).second?.soFile
     }
 
     fun isModuleInstalledAndCurrent(context: Context): Boolean {
-        val installedSo = getInstalledModuleSo(context) ?: return false
-        val builtSo = RecompPipeline.getBuiltGameSo(context)
-        if (!builtSo.isFile) return true // module installed externally or previously
-        if (installedSo.length() != builtSo.length()) return false
-        val stamp = File(context.filesDir, "build/.installed_module_sha256")
-        if (!stamp.isFile) return false
-        val builtHash = RecompPipeline.sha256Hex(builtSo.readBytes())
-        return stamp.readText().trim() == builtHash
+        return ModuleState.evaluate(context).readiness == ReadinessState.READY
     }
 
     fun markModuleInstalled(context: Context) {
-        val builtSo = RecompPipeline.getBuiltGameSo(context)
-        if (builtSo.isFile) {
-            val hash = RecompPipeline.sha256Hex(builtSo.readBytes())
-            File(context.filesDir, "build/.installed_module_sha256").writeText(hash)
+        ModuleState.recordInstalled(context)
+    }
+
+    private fun patchManifestVersionCode(raw: ByteArray, versionCode: Int): ByteArray {
+        val out = raw.copyOf()
+        val bb = ByteBuffer.wrap(out).order(ByteOrder.LITTLE_ENDIAN)
+        if (out.size < 8) return out
+        var pos = 8
+        var resIds = IntArray(0)
+        while (pos + 8 <= out.size) {
+            val ctype = bb.getShort(pos).toInt() and 0xFFFF
+            val hdrSize = bb.getShort(pos + 2).toInt() and 0xFFFF
+            val chunkSize = bb.getInt(pos + 4)
+            if (chunkSize < 8 || pos + chunkSize > out.size) break
+            if (ctype == 0x0180) {
+                val count = (chunkSize - hdrSize) / 4
+                resIds = IntArray(count) { idx -> bb.getInt(pos + hdrSize + idx * 4) }
+            } else if (ctype == 0x0102 && pos + hdrSize + 14 <= out.size) {
+                val ext = pos + hdrSize
+                val attrStart = bb.getShort(ext + 8).toInt() and 0xFFFF
+                val attrSize = bb.getShort(ext + 10).toInt() and 0xFFFF
+                val attrCount = bb.getShort(ext + 12).toInt() and 0xFFFF
+                for (i in 0 until attrCount) {
+                    val ao = ext + attrStart + i * attrSize
+                    if (ao + 20 > pos + chunkSize) break
+                    val nameIdx = bb.getInt(ao + 4)
+                    val vtype = out[ao + 15].toInt() and 0xFF
+                    if (nameIdx in resIds.indices && resIds[nameIdx] == 0x0101021b && vtype == 0x10) {
+                        bb.putInt(ao + 16, versionCode)
+                        return out
+                    }
+                }
+            }
+            pos += chunkSize
         }
+        return out
     }
 
     fun buildAndSignModuleApk(context: Context, soFile: File, log: (String) -> Unit): File {
@@ -93,10 +103,12 @@ object GameModulePackager {
         val unsignedApk = File(buildDir, "gamemodule-unsigned.apk")
         val signedApk = File(buildDir, "gamemodule-signed.apk")
 
-        val manifestBytes = context.assets.open("gamemodule_manifest.bin").use { it.readBytes() }
+        val versionCode = ModuleState.nextInstallVersionCode(context).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        val rawManifestBytes = context.assets.open("gamemodule_manifest.bin").use { it.readBytes() }
+        val manifestBytes = patchManifestVersionCode(rawManifestBytes, versionCode)
         val soEntryName = "lib/$abi/libemotionalsense_game.so"
 
-        log("Packaging $soEntryName (${soFile.length() / (1024 * 1024)} MiB) into mini-APK...")
+        log("Packaging $soEntryName (v$versionCode, ${soFile.length() / (1024 * 1024)} MiB) into mini-APK...")
         val crc = CRC32()
         val buf = ByteArray(65536)
         FileInputStream(soFile).use { fis ->

@@ -3,6 +3,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 import java.util.zip.GZIPOutputStream
 import java.util.zip.ZipFile
 
@@ -25,6 +26,55 @@ val supportedAbis = (requestedAbis ?: availableAbis).ifEmpty { listOf("x86_64") 
 val generatedKitAssetsDir = layout.buildDirectory.dir("generated/assets/kit")
 val generatedModuleAssetsDir = layout.buildDirectory.dir("generated/assets/gamemodule")
 
+val kitFormatStamp = "clang21-lld21-v3"
+
+fun computeKitVersionStamp(stageDir: File, abis: List<String>, formatStamp: String): String {
+    val md = MessageDigest.getInstance("SHA-256")
+    fun feedText(s: String) = md.update(s.toByteArray(StandardCharsets.UTF_8))
+    fun feedFile(label: String, file: File) {
+        feedText(label)
+        if (file.isFile) {
+            val buf = ByteArray(65536)
+            FileInputStream(file).use { fis ->
+                while (true) {
+                    val n = fis.read(buf)
+                    if (n <= 0) break
+                    md.update(buf, 0, n)
+                }
+            }
+        } else {
+            feedText("<missing>")
+        }
+    }
+    fun feedTree(prefix: String, dir: File) {
+        if (!dir.isDirectory) {
+            feedText("$prefix:<missing>")
+            return
+        }
+        dir.walkTopDown()
+            .filter { it.isFile }
+            .sortedBy { it.relativeTo(dir).invariantSeparatorsPath }
+            .forEach { f ->
+                val rel = f.relativeTo(dir).invariantSeparatorsPath
+                feedFile("$prefix/$rel", f)
+            }
+    }
+
+    feedText("format=$formatStamp")
+    for (abi in abis.sorted()) {
+        val kitDir = File(stageDir, "$abi/kit/$abi")
+        feedText("abi=$abi")
+        feedFile("$abi/kit_manifest.json", File(kitDir, "kit_manifest.json"))
+        feedFile("$abi/libpsprecomp.a", File(kitDir, "libpsprecomp.a"))
+        feedTree("$abi/objs", File(kitDir, "objs"))
+        feedTree("$abi/include", File(kitDir, "include"))
+    }
+    val shortHash = md.digest().joinToString("") { "%02x".format(it) }.take(12)
+    return "$formatStamp-$shortHash"
+}
+
+val kitVersionStamp = computeKitVersionStamp(stageRoot, supportedAbis, kitFormatStamp)
+
 android {
     namespace = "io.emotionalsense.p3"
     compileSdk = 37
@@ -41,6 +91,8 @@ android {
         }
 
         buildConfigField("String", "GAME_MODULE_PACKAGE", "\"io.emotionalsense.p3.gamemodule\"")
+        buildConfigField("String", "KIT_FORMAT_STAMP", "\"$kitFormatStamp\"")
+        buildConfigField("String", "KIT_VERSION_STAMP", "\"$kitVersionStamp\"")
     }
 
     buildFeatures {
@@ -90,6 +142,9 @@ abstract class PackageKitTask : DefaultTask() {
     @get:Input
     abstract val abis: ListProperty<String>
 
+    @get:Input
+    abstract val kitVersion: Property<String>
+
     @get:OutputDirectory
     abstract val outputDir: DirectoryProperty
 
@@ -138,20 +193,39 @@ abstract class PackageKitTask : DefaultTask() {
             if (f.isDirectory) {
                 writeTarHeader(out, "$arcName/", 0L, isDir = true, executable = true)
             } else if (f.isFile) {
-                val len = f.length()
-                writeTarHeader(out, arcName, len, isDir = false, executable = f.canExecute())
-                FileInputStream(f).use { fis ->
-                    var left = len
-                    while (left > 0) {
-                        val n = fis.read(buf, 0, minOf(buf.size.toLong(), left).toInt())
-                        if (n <= 0) break
-                        out.write(buf, 0, n)
-                        left -= n
+                if (arcName == "kit_manifest.json") {
+                    val rawText = f.readText(StandardCharsets.UTF_8).trimEnd()
+                    val patched = if (rawText.endsWith("}") && !rawText.contains("\"kit_version\"")) {
+                        val body = rawText.dropLast(1).trimEnd()
+                        val sep = if (body.endsWith("{")) "" else ","
+                        "$body$sep\n  \"kit_version\": \"${kitVersion.get()}\"\n}\n"
+                    } else {
+                        rawText + "\n"
                     }
-                }
-                val rem = (512 - (len % 512)) % 512
-                if (rem > 0) {
-                    out.write(ByteArray(rem.toInt()))
+                    val bytes = patched.toByteArray(StandardCharsets.UTF_8)
+                    val len = bytes.size.toLong()
+                    writeTarHeader(out, arcName, len, isDir = false, executable = false)
+                    out.write(bytes)
+                    val rem = ((512L - (len % 512L)) % 512L).toInt()
+                    if (rem > 0) {
+                        out.write(ByteArray(rem))
+                    }
+                } else {
+                    val len = f.length()
+                    writeTarHeader(out, arcName, len, isDir = false, executable = f.canExecute())
+                    FileInputStream(f).use { fis ->
+                        var left = len
+                        while (left > 0) {
+                            val n = fis.read(buf, 0, minOf(buf.size.toLong(), left).toInt())
+                            if (n <= 0) break
+                            out.write(buf, 0, n)
+                            left -= n
+                        }
+                    }
+                    val rem = (512 - (len % 512)) % 512
+                    if (rem > 0) {
+                        out.write(ByteArray(rem.toInt()))
+                    }
                 }
             }
         }
@@ -265,6 +339,7 @@ abstract class BuildGameModuleManifestTask : DefaultTask() {
 val packageAndroidKit = tasks.register<PackageKitTask>("packageAndroidKit") {
     stageDir.set(stageRoot)
     abis.set(supportedAbis)
+    kitVersion.set(kitVersionStamp)
     outputDir.set(generatedKitAssetsDir)
 }
 
