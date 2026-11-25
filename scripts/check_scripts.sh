@@ -224,17 +224,41 @@ check_speed_play() {   # style
 for m in 4t 6t 32t 42t 62t; do check_speed_play $m; done
 
 # Scroll speed in the captured picture: the same Auto Velocity number gives the same speed on a 114 and a 196
-# BPM song (+-3 %: the captures are taken while the game runs, and under load the measure wandered between 0.99 and 1.02 in round 36, against 1.70 for Original); Original gives the PSP proportion (the tempo ratio, +-6 %: few lines are visible at a time). Needs the Vulkan renderer
-# and python3 with PIL; skipped (and said so) when either is missing.
+# BPM song; Original gives the PSP proportion (the tempo ratio). Needs the Vulkan renderer and python3 with PIL;
+# skipped (and said so) when either is missing.
+#
+# Q1 (round 37): the measure no longer depends on the user's save. A save is *built here*: a data folder with an
+# empty ms/ makes the game ask for a player name, scripts/dump/profile.script (the texture-dump bootstrap) answers it and the game writes a
+# brand-new SD.BIN (always the same bytes: default skin, speed 2.5 after the poke below, song list on its first
+# song, nothing played). Every measure runs on a copy of that, with the Respect speed set by es_speed.json
+# (2.5) and the Original speed byte poked to 2.5 (index 5). Rebuilt on every run, never stored in the repository.
+make_speed_base() {   # builds $tmp/speedbase/ms once
+    [ -d "$tmp/speedbase/ms" ] && return 0
+    mkdir -p "$tmp/speedbase/ms"
+    ln -s "$data/disc" "$tmp/speedbase/disc"; ln -s "$data/module" "$tmp/speedbase/module"
+    EMOTIONALSENSE_CONFIRM=circle EMOTIONALSENSE_SCRIPT="@$root/scripts/dump/profile.script" \
+    EMOTIONALSENSE_CLOCK=virtual EMOTIONALSENSE_UNCAP=1 SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=dummy \
+        "$game" --data "$tmp/speedbase" --frames 2700 --renderer null >/dev/null 2>&1 || true
+    ls "$tmp"/speedbase/ms/PSP/SAVEDATA/*/SD.BIN >/dev/null 2>&1 || { echo "FAIL: the profile route did not create a save (scripts/dump/profile.script)" >&2; return 1; }
+}
+speed_data() {   # prints a new data dir: disc/module linked, the fresh save copied, Respect speed 2.5
+    d=$(mktemp -d)
+    ln -s "$data/disc" "$d/disc"; ln -s "$data/module" "$d/module"; cp -a "$tmp/speedbase/ms" "$d/ms"
+    printf '{\n "version": 1,\n "tenths": 25\n}\n' > "$d/es_speed.json"
+    case $(cd "$d" && pwd -P) in */work/data) echo "refusing to run on work/data" >&2; return 1 ;; esac
+    echo "$d"
+}
 measure_song() {   # script mode -> prints "px_per_vblank tempo"
-    sdata=$(fresh_data); log=$(mktemp); shots=$(mktemp -d)
-    export EMOTIONALSENSE_SPEED=$2 EMOTIONALSENSE_POKE="${J}+0x7FC:0x42C80000" EMOTIONALSENSE_CONFIRM=circle \
+    sdata=$(speed_data); log=$(mktemp); shots=$(mktemp -d)
+    pokes="${J}+0x7FC:0x42C80000"
+    [ "$2" = original ] && pokes="$pokes,0x130E62:5:1"    # the game's own speed index: 2.5
+    export EMOTIONALSENSE_SPEED=$2 EMOTIONALSENSE_POKE="$pokes" EMOTIONALSENSE_CONFIRM=circle \
            EMOTIONALSENSE_CLOCK=virtual EMOTIONALSENSE_UNCAP=1 SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=dummy
     EMOTIONALSENSE_SCRIPT="@$root/scripts/$1.script" EMOTIONALSENSE_POLL=scene \
         "$game" --data "$sdata" --frames 3300 --renderer vulkan >/dev/null 2>"$log" || true
     s3=$(grep '0x0805E874 = 0x00000003' "$log" | head -1 | sed 's/poll\[\([0-9]*\)\].*/\1/')
     tempo=$(grep -o 'chart tempo [0-9.]*' "$log" | head -1 | sed 's/chart tempo //')
-    a=$((s3 + 500)); b=$((a + 698))
+    a=$((s3 + 500)); b=$((a + 1000))
     list=$(python3 -c "print(','.join(str(x) for x in range($a, $b + 1, 2)))")
     EMOTIONALSENSE_SCRIPT="@$root/scripts/$1.script" EMOTIONALSENSE_SHOT="$list" EMOTIONALSENSE_SHOT_DIR="$shots" \
         "$game" --data "$sdata" --frames $((b + 5)) --renderer vulkan --internal-scale 2 >/dev/null 2>"$log" || true
@@ -244,6 +268,7 @@ measure_song() {   # script mode -> prints "px_per_vblank tempo"
     echo "$px ${tempo:-0}"
 }
 if python3 -c "import PIL" 2>/dev/null && [ "${ES_CHECK_NO_VULKAN:-0}" != 1 ]; then
+    make_speed_base
     set -- $(measure_song speed_a respect); ra=$1; ta=$2
     set -- $(measure_song speed_b respect); rb=$1; tb=$2
     set -- $(measure_song speed_a original); oa=$1
@@ -256,9 +281,9 @@ if min(ra, rb, oa, ob, ta, tb) <= 0:
 r = rb / ra; o = ob / oa; want = tb / ta
 print("   respect: %.4f vs %.4f px/vblank (B/A %.4f, tempo %g / %g); original: %.4f vs %.4f (B/A %.3f, tempo ratio %.3f)"
       % (ra, rb, r, ta, tb, oa, ob, o, want))
-sys.exit(0 if abs(r - 1) <= 0.03 and abs(o / want - 1) <= 0.06 else 1)
+sys.exit(0 if abs(r - 1) <= 0.01 and abs(o / want - 1) <= 0.01 else 1)
 PY
-    then echo "OK: speed: Respect keeps the scroll speed across songs (+-3 %), Original keeps the PSP's tempo proportion"
+    then echo "OK: speed: Respect keeps the scroll speed across songs (+-1 %), Original keeps the PSP's tempo proportion (+-1 %)"
     else echo "FAIL: speed in px/s" >&2; exit 1; fi
 else
     echo "SKIP: speed in px/s (needs python3 with PIL and a Vulkan renderer)"
