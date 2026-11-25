@@ -50,6 +50,8 @@ def _candidates(kit: Optional[Path]):
 
 
 class Pad:
+    kind = None            # style of the controller that pressed last (es_buttons.classify_pad)
+
     def __init__(self, kit: Optional[Path] = None):
         self.sdl = None
         self.gcs = []
@@ -58,6 +60,7 @@ class Pad:
         self._next = {}
         self._stuck = set()    # (device, key) already "pressed" when first seen: ignored until released once
         self._axis = {}        # (device, key) -> past the dead zone (hysteresis)
+        self.kind = None       # style of the controller that pressed last (es_buttons.classify_pad)
         self._ngc = -1
         self.confirm_cross = False
         if os.environ.get("EMOTIONALSENSE_NO_PAD"):
@@ -83,6 +86,8 @@ class Pad:
         s.SDL_IsGameController.argtypes = [ctypes.c_int]
         s.SDL_SetHint.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
         s.SDL_SetHint(b"SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS", b"1")
+        # positional face buttons: the bottom one is always the cross, even on a Nintendo pad
+        s.SDL_SetHint(b"SDL_GAMECONTROLLER_USE_BUTTON_LABELS", b"0")
         if s.SDL_Init(INIT_GAMECONTROLLER) != 0:
             self.sdl = None
             return
@@ -144,6 +149,21 @@ class Pad:
                 st[(d, key)] = bool(hit)
         return st
 
+    def _kind_of(self, d):
+        """The style of controller `d` (None if this SDL cannot tell: older than 2.0.12)."""
+        try:
+            import es_buttons
+            s, g = self.sdl, self.gcs[d]
+            s.SDL_GameControllerGetType.argtypes = [ctypes.c_void_p]
+            s.SDL_GameControllerGetVendor.argtypes = [ctypes.c_void_p]
+            s.SDL_GameControllerGetProduct.argtypes = [ctypes.c_void_p]
+            s.SDL_GameControllerGetVendor.restype = s.SDL_GameControllerGetProduct.restype = ctypes.c_uint16
+            sd = os.environ.get("SteamDeck", "")
+            return es_buttons.classify_pad(int(s.SDL_GameControllerGetType(g)), int(s.SDL_GameControllerGetVendor(g)),
+                                           int(s.SDL_GameControllerGetProduct(g)), sd not in ("", "0"))
+        except (AttributeError, IndexError, OSError):
+            return None
+
     def _ax(self, d, key, v) -> bool:
         on = self._axis.get((d, key), False)
         on = v > (LIVE if on else DEAD)
@@ -168,6 +188,7 @@ class Pad:
                     continue
                 if not self._held.get(k):
                     self._held[k] = True
+                    self.kind = self._kind_of(k[0]) or self.kind
                     self._next[k] = now + REPEAT_FIRST
                     out.append(k[1])
                 elif k[1] in ("up", "down", "left", "right") and now >= self._next[k]:

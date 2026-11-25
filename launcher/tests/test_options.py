@@ -42,6 +42,14 @@ class GameOptions(unittest.TestCase):
         self.assertEqual(env_for(speed="original")["EMOTIONALSENSE_SPEED"], "original")
         self.assertEqual(env_for(speed="nonsense")["EMOTIONALSENSE_SPEED"], "respect")
 
+    def test_button_style_and_triggers(self):
+        self.assertEqual(env_for()["EMOTIONALSENSE_BUTTONS"], "auto")
+        self.assertEqual(env_for(button_style="switch")["EMOTIONALSENSE_BUTTONS"], "switch")
+        self.assertEqual(env_for(button_style="nonsense")["EMOTIONALSENSE_BUTTONS"], "auto")
+        self.assertEqual(env_for()["EMOTIONALSENSE_TRIGGERS_2T"], "stick")
+        self.assertEqual(env_for(triggers_2t="lr")["EMOTIONALSENSE_TRIGGERS_2T"], "lr")
+        self.assertEqual(env_for(triggers_2t="nonsense")["EMOTIONALSENSE_TRIGGERS_2T"], "stick")
+
     def test_chosen_rate_is_passed(self):
         self.assertEqual(env_for(refresh="120")["EMOTIONALSENSE_REFRESH"], "120")
         self.assertEqual(env_for(refresh="auto")["EMOTIONALSENSE_REFRESH"], "auto")

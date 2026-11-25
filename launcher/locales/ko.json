@@ -111,7 +111,7 @@
  "options.fever": "피버 모드",
  "options.fever.respect": "리스펙트(자동)",
  "options.fever.original": "오리지널(PSP)",
- "options.hint_fever": "리스펙트: 게이지가 차면 피버가 자동으로 시작되고, 피버 x4 이상에서도 레인 속도는 설정한 그대로입니다. 오리지널: X 버튼으로 피버가 시작되고 PSP처럼 x4 이상에서 레인이 빨라집니다. 미션 모드에서는 항상 오리지널이 적용됩니다.",
+ "options.hint_fever": "리스펙트: 게이지가 차면 피버가 자동으로 시작되고, 피버 x4 이상에서도 레인 속도는 설정한 그대로입니다. 오리지널: {fever_btn} 버튼으로 피버가 시작되고 PSP처럼 x4 이상에서 레인이 빨라집니다. 미션 모드에서는 항상 오리지널이 적용됩니다.",
  "options.score": "점수 방식",
  "options.score.respect": "리스펙트(0~1,000,000)",
  "options.score.original": "오리지널(PSP)",
@@ -156,5 +156,18 @@
  "texpack.no_vulkan": "이 옵션에는 Vulkan 그래픽 드라이버가 필요한데 찾지 못했습니다.",
  "texpack.no_net": "도구를 내려받지 못했습니다(네트워크가 끊겼나요?): {error}",
  "texpack.unsupported": "이 플랫폼에서는 아직 사용할 수 없습니다. 확대 도구에 {arch}용 빌드가 없습니다.",
- "texpack.not_ready": "먼저 게임을 준비하세요."
+ "texpack.not_ready": "먼저 게임을 준비하세요.",
+ "options.buttons": "버튼 표시",
+ "options.buttons.auto": "자동(마지막 컨트롤러)",
+ "options.buttons.playstation": "PlayStation",
+ "options.buttons.xbox": "Xbox",
+ "options.buttons.steamdeck": "Steam Deck",
+ "options.buttons.switch": "Switch",
+ "options.hint_buttons": "게임 안의 버튼 안내(OK, Cancel, Yes, No 등)와 이 런처에 선택한 컨트롤러의 버튼을 표시합니다. Xbox(색깔 있는 A B X Y), Steam Deck(A B X Y), Switch(위치 기준 B A Y X). 자동은 마지막으로 사용한 컨트롤러를 따릅니다. 게임 안의 안내는 Vulkan 렌더러에서만 다시 그려집니다.",
+ "options.triggers": ".2T 모드의 트리거",
+ "options.triggers.stick": "아날로그(사이드 노트)",
+ "options.triggers.lr": "L/R(속도)",
+ "options.hint_triggers": "3.2T, 4.2T, 6.2T 곡에서는 왼쪽과 오른쪽 트리거가 아날로그 스틱처럼 사이드 노트를 칩니다(스틱도 그대로 동작하고, 키보드의 E와 R도 같습니다). L/R: 트리거가 L과 R이 되어 버전 0.1처럼 속도가 바뀝니다. 그 밖의 곳에서는 트리거가 항상 L과 R입니다.",
+ "options.confirm.letter": "{btn}로 확인",
+ "options.hint_confirm_letter": "아시아 버전에서는 {east}, 서양 버전에서는 {south}로 확인합니다. 게임 안에서는 메뉴에만 적용되고 레인 키에는 영향을 주지 않습니다."
 }

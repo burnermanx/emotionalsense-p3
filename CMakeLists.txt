@@ -75,6 +75,9 @@ if(NOT CMAKE_CROSSCOMPILING)
                  COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_prxreloc.py"
                          $<TARGET_FILE:es_prxreloc>)
     endif()
+
+    add_executable(test_button_style game/tests/test_button_style.c)
+    add_test(NAME button_style COMMAND test_button_style)
 endif()
 
 add_subdirectory(game)

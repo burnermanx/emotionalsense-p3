@@ -111,7 +111,7 @@
  "options.fever": "フィーバーモード",
  "options.fever.respect": "リスペクト（自動）",
  "options.fever.original": "オリジナル（PSP）",
- "options.hint_fever": "リスペクト：ゲージが満タンになるとフィーバーが自動で始まり、フィーバーx4以上でもレーンの速度は設定のままです。オリジナル：Xボタンでフィーバーが始まり、PSPと同じくx4以上でレーンが加速します。ミッションモードでは常にオリジナルが適用されます。",
+ "options.hint_fever": "リスペクト：ゲージが満タンになるとフィーバーが自動で始まり、フィーバーx4以上でもレーンの速度は設定のままです。オリジナル：{fever_btn}ボタンでフィーバーが始まり、PSPと同じくx4以上でレーンが加速します。ミッションモードでは常にオリジナルが適用されます。",
  "options.score": "スコアシステム",
  "options.score.respect": "リスペクト（0〜1,000,000）",
  "options.score.original": "オリジナル（PSP）",
@@ -156,5 +156,18 @@
  "texpack.no_vulkan": "このオプションには Vulkan 対応のグラフィックドライバーが必要ですが、見つかりませんでした。",
  "texpack.no_net": "ツールをダウンロードできませんでした(ネットワークに接続していますか?): {error}",
  "texpack.unsupported": "このプラットフォームではまだ利用できません。拡大ツールに {arch} 版がありません。",
- "texpack.not_ready": "先にゲームを準備してください。"
+ "texpack.not_ready": "先にゲームを準備してください。",
+ "options.buttons": "ボタンの表示",
+ "options.buttons.auto": "自動（最後に使ったコントローラー）",
+ "options.buttons.playstation": "PlayStation",
+ "options.buttons.xbox": "Xbox",
+ "options.buttons.steamdeck": "Steam Deck",
+ "options.buttons.switch": "Switch",
+ "options.hint_buttons": "ゲーム内のボタン表示（OK、Cancel、Yes、Noなど）とこのランチャーに、選んだコントローラーのボタンを表示します。Xbox（色付きのA B X Y）、Steam Deck（A B X Y）、Switch（位置順にB A Y X）。自動は最後に使ったコントローラーに合わせます。ゲーム内の表示を描き換えるのはVulkanレンダラーのみです。",
+ "options.triggers": ".2Tモードのトリガー",
+ "options.triggers.stick": "アナログ（サイドノーツ）",
+ "options.triggers.lr": "L/R（速度）",
+ "options.hint_triggers": "3.2T、4.2T、6.2Tの曲では、左右のトリガーがアナログスティックと同じようにサイドノーツを叩きます（スティックもそのまま使え、キーボードのEとRも同じ動作です）。L/R：トリガーはLとRになり、バージョン0.1と同じく速度が変わります。それ以外ではトリガーは常にLとRです。",
+ "options.confirm.letter": "{btn}で決定",
+ "options.hint_confirm_letter": "アジア版では{east}、欧米版では{south}で決定します。ゲーム内ではメニューのみに適用され、レーンのキーには影響しません。"
 }
