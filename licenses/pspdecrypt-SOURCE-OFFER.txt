@@ -14,7 +14,7 @@ Corresponding source of the exact revision shipped:
     revision c156627db7634d395c380c0a9589130f603307fc
 
 Every release also attaches that revision's source archive
-(pspdecrypt-src-c156627.tar.gz) next to the launcher. If you received the
+(pspdecrypt-source-c156627.tar.gz) next to the launcher. If you received the
 binary without it, you may request the source for three years from the
 release date by opening an issue at the EmotionalSense repository; it is also
 available at the URL above for as long as that repository exists.

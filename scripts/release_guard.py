@@ -16,7 +16,7 @@ A packaged .AppImage, .zip, .tar.gz or .apk must also be named
 EmotionalSense-P3-<version>-<system>-<arch>.<ext> with system windows|linux and arch
 x86_64|arm64|aarch64, or EmotionalSense-P3-<version>-android-<arm64|x86_64>.apk (the
 product's display name); anything else is reported as a failure, so a stale artefact
-name cannot reach a release. (The source tarball, ...-src.tar.gz, and the pspdecrypt
+name cannot reach a release. (The source tarball, ...-source.tar.gz, and the pspdecrypt
 source are not "packaged" artefacts and are not passed to this guard by name rules; they
 are listed like the rest.)
 """
@@ -81,14 +81,14 @@ def listing(path: Path):
     p = str(path)
     if path.is_dir():
         for r, ds, fs in os.walk(path):
-            for n in ds + fs:
+            for n in fs:                  # files only: a folder is not a program (the Android sources have io/emotionalsense/)
                 yield str((Path(r) / n).relative_to(path)).replace(os.sep, "/")
     elif p.endswith((".zip", ".apk")):
         with zipfile.ZipFile(path) as z:
-            yield from z.namelist()
+            yield from (n for n in z.namelist() if not n.endswith("/"))
     elif re.search(r"\.(tar|tar\.gz|tgz|tar\.xz|tar\.bz2)$", p):
         with tarfile.open(path) as t:
-            yield from t.getnames()
+            yield from (m.name for m in t.getmembers() if not m.isdir())
     elif p.endswith(".AppImage"):
         yield from appimage_listing(path)
     else:
@@ -127,7 +127,7 @@ def name_problem(path: Path):
     if n.endswith((".AppImage", ".zip", ".apk")) and not n.startswith(PRODUCT_PREFIX):
         return f"artefact name must start with {PRODUCT_PREFIX}"
     if n.startswith(PRODUCT_PREFIX) and n.endswith((".AppImage", ".zip", ".tar.gz", ".apk")) \
-            and not n.endswith("-src.tar.gz") and not PACKAGE_NAME.match(n):
+            and not n.endswith("-source.tar.gz") and not PACKAGE_NAME.match(n):
         return ("package name must be EmotionalSense-P3-<version>-<windows|linux>-<x86_64|arm64|aarch64>."
                 "<AppImage|zip|tar.gz> or EmotionalSense-P3-<version>-android-<arm64|x86_64>.apk")
     return None

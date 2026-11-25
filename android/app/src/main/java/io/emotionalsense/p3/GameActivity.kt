@@ -23,6 +23,8 @@ class GameActivity : SDLActivity(), InputManager.InputDeviceListener {
         const val EXTRA_FEVER = "fever"
         const val EXTRA_SPEED = "speed"
         const val EXTRA_SCORE = "score"
+        const val EXTRA_BUTTONS = "buttons"
+        const val EXTRA_TRIGGERS_2T = "triggers_2t"
         const val EXTRA_UNLOCK = "unlock"
         const val EXTRA_UNLOCK_ITEMS = "unlock_items"
         const val EXTRA_AUDIO_LATENCY_MS = "audio_latency_ms"
@@ -205,6 +207,8 @@ class GameActivity : SDLActivity(), InputManager.InputDeviceListener {
         val fever = intent?.getStringExtra(EXTRA_FEVER) ?: "respect"
         val speed = intent?.getStringExtra(EXTRA_SPEED) ?: "respect"
         val score = intent?.getStringExtra(EXTRA_SCORE) ?: "respect"
+        val buttons = intent?.getStringExtra(EXTRA_BUTTONS) ?: "auto"
+        val triggers2t = intent?.getStringExtra(EXTRA_TRIGGERS_2T) ?: "stick"
 
         val args = mutableListOf(
             "--data", filesDir.absolutePath,
@@ -213,7 +217,9 @@ class GameActivity : SDLActivity(), InputManager.InputDeviceListener {
             "--confirm", confirm,
             "--fever", fever,
             "--speed", speed,
-            "--score", score
+            "--score", score,
+            "--buttons", buttons,
+            "--triggers-2t", triggers2t
         )
         if (internalScale != "auto") {
             args.add("--internal-scale")

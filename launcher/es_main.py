@@ -181,7 +181,11 @@ def game_command(exe: Path, data: Path, cfg: dict, extra=(), confirm: str = "", 
     env["EMOTIONALSENSE_BUTTONS"] = style if style in BUTTON_STYLE_VALUES else "auto"
     trig = cfg.get("triggers_2t", "stick")
     env["EMOTIONALSENSE_TRIGGERS_2T"] = trig if trig in TRIGGERS_2T_VALUES else "stick"
-    env["EMOTIONALSENSE_FULLSCREEN"] = {"window": "0", "fullscreen": "1"}.get(str(cfg.get("start_mode", "last")), "auto")
+    start_mode = str(cfg.get("start_mode", "last"))
+    env["EMOTIONALSENSE_FULLSCREEN"] = {"window": "0", "fullscreen": "1"}.get(start_mode, "auto")
+    # RecompLauncher's Big Picture mode: "Last" opens in full screen (a named window/fullscreen option still wins).
+    if start_mode not in ("window", "fullscreen") and env.get("RECOMPLAUNCHER_MODE") == "bigpicture":
+        env["EMOTIONALSENSE_FULLSCREEN"] = "1"
     # The game's own prompts (exit confirmation) follow the launcher language.
     env["EMOTIONALSENSE_LANG"] = es_i18n.language()
     env["EMOTIONALSENSE_BGA_SMOOTH"] = "blend" if str(cfg.get("bga_smooth", "0")) == "blend" else "0"

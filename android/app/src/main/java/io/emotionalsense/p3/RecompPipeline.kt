@@ -219,6 +219,8 @@ object RecompPipeline {
         cancelled: () -> Boolean
     ): File {
         val dataDir = context.filesDir
+        // an interrupted rebuild must never look finished: the marker is written again only at the end
+        File(dataDir, "prepared.json").delete()
         val nativeLibDir = File(context.applicationInfo.nativeLibraryDir)
         val abiInfo = detectAbi(context)
 

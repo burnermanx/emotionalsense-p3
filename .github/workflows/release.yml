@@ -72,13 +72,13 @@ jobs:
           mkdir -p "$dir" out
           git archive HEAD | tar -x -C "$dir"
           git -C psprecomp archive HEAD | tar -x -C "$dir/psprecomp"
-          tar -czf "out/$dir-src.tar.gz" "$dir"
+          tar -czf "out/$dir-source.tar.gz" "$dir"
 
       - name: Source of pspdecrypt (GPL-3.0), the pinned revision
         run: |
           set -eu
           mkdir -p out
-          curl -fsSL -o "out/pspdecrypt-src-${PSPDECRYPT_REV%${PSPDECRYPT_REV#???????}}.tar.gz" \
+          curl -fsSL -o "out/pspdecrypt-source-${PSPDECRYPT_REV%${PSPDECRYPT_REV#???????}}.tar.gz" \
             "https://github.com/John-K/pspdecrypt/archive/${PSPDECRYPT_REV}.tar.gz"
 
       - name: Release notes from CHANGELOG.md
@@ -486,6 +486,9 @@ jobs:
           test "$(ls release/EmotionalSense-P3-* | wc -l)" = 9
           test "$(ls release/*.AppImage.zsync | wc -l)" = 2
           test "$(ls release/*.apk | wc -l)" = 1
+          # the source tarball is named ...-source.tar.gz (never "-src": RecompLauncher must not take it for a game package)
+          test "$(ls release/emotionalsense-*-source.tar.gz | wc -l)" = 1
+          test "$(ls release/*-src.tar.gz 2>/dev/null | wc -l)" = 0
           python3 scripts/release_guard.py release/*
           (cd release && sha256sum * > SHA256SUMS)
           cat release/SHA256SUMS

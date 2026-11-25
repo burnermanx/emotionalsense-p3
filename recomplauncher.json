@@ -81,6 +81,27 @@
       "defaults": { "confirm": "\"auto\"" }
     },
     {
+      "id": "button_style", "label": "Button symbols", "group": "Gameplay",
+      "help": "The button symbols the game draws. Auto follows the controller you use (RecompLauncher's pad family until one is connected).",
+      "choices": [
+        { "label": "Auto", "set": { "button_style": "\"auto\"" } },
+        { "label": "PlayStation", "set": { "button_style": "\"playstation\"" } },
+        { "label": "Xbox", "set": { "button_style": "\"xbox\"" } },
+        { "label": "Steam Deck", "set": { "button_style": "\"steamdeck\"" } },
+        { "label": "Switch", "set": { "button_style": "\"switch\"" } }
+      ],
+      "defaults": { "button_style": "\"auto\"" }
+    },
+    {
+      "id": "triggers_2t", "label": "Triggers in 3.2T, 4.2T and 6.2T", "group": "Gameplay",
+      "help": "Stick: LT and RT play the two side notes, like the PSP's analog stick. L/R: they act as the L and R buttons (speed).",
+      "choices": [
+        { "label": "Stick", "set": { "triggers_2t": "\"stick\"" } },
+        { "label": "L/R", "set": { "triggers_2t": "\"lr\"" } }
+      ],
+      "defaults": { "triggers_2t": "\"stick\"" }
+    },
+    {
       "id": "unlock", "label": "Unlock all songs", "group": "Gameplay",
       "help": "Every chart and the 4.2T and 6.2T modes. What the game saves while it's on stays unlocked.",
       "choices": [

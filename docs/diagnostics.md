@@ -103,6 +103,8 @@ EMOTIONALSENSE_SYNC_LOG=1 ./EmotionalSense-P3-0.1.0-linux-x86_64.AppImage --run
 | `EMOTIONALSENSE_BUTTONS` / `--buttons` | `auto` (default), `playstation`, `xbox`, `steamdeck`, `switch` | see `buttons.md` |
 | `EMOTIONALSENSE_TRIGGERS_2T` / `--triggers-2t` | `stick` (default) or `lr` | see `buttons.md` |
 | `EMOTIONALSENSE_TRACE_PAD` | logs every controller the window opens: name, SDL type, vendor:product and the button style it maps to | what Steam Input reports on a Deck |
+| `PSPRECOMP_GE_CENSUS=1` | the GE report at exit lists every command the interpreter does not decode (and BEZIER, SPLINE, BJUMP, SIGNAL, TEXLEVEL, which it decodes only to ignore) per game scene: total / with a non-zero argument, and the first distinct arguments | a command that only ever carries 0 is the hardware default being re-sent, not a use of the feature; needs `EMOTIONALSENSE_LOG=1` |
+| `EMOTIONALSENSE_TRACE_VBDT=<from>-<to>` | per vblank in the range: the guest clock step (a long frame is several periods), the firmware calls made in between (all, the two MPEG access-unit getters, CheckCallback) and the busiest call names when there were 200 or more | the opening's stream change (round 37) |
 | `EMOTIONALSENSE_TRACE_SPEED` | logs the chart header and the judge's tempo at the song-start call sites | |
 | `EMOTIONALSENSE_SHOT_OVERLAY` | `1`: the captures (`EMOTIONALSENSE_SHOT`, `--capture`, F12) carry the host overlay (the speed label, the exit dialog) | a test aid; the window's compositor cannot be captured from a script |
 | `EMOTIONALSENSE_OVERLAY_SHOT=<file>` (+ `EMOTIONALSENSE_OVERLAY_SHOT_EVERY=N`) | the first overlaid frame is written to `<file>` (a `.ppm`); with `..._EVERY` one every N vblanks as `<file>.<vblank>.ppm` | a test aid (dialogs, labels) |

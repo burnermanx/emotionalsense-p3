@@ -12,6 +12,25 @@ build the rest from your own disc.
 
 ### Added
 
+- **Android (arm64)**: an APK that prepares the game on the phone from the player's own disc image (Storage Access Framework),
+  with the same pipeline as the PC (disc extraction, pspdecrypt as a separate program, recompilation, an on-device compiler from
+  the APK's kit) and loads the result as a library; touch controls; the launcher's options, including the button symbols and the
+  2T triggers. The APK carries nothing from the game (`scripts/release_guard.py` checks it) and is signed with the project's
+  release key: a release without the signing secrets fails instead of shipping a debug-signed APK.
+- The pspdecrypt source next to the packages is `pspdecrypt-source-<rev>.tar.gz` (was `-src`).
+
+- **RecompLauncher, round 37**: `button_style=auto` starts from `RECOMPLAUNCHER_PAD` (`xbox` / `playstation`) before any controller
+  is seen (a connected controller and a named style still win); `RECOMPLAUNCHER_MODE=bigpicture` with Start in "Last" opens
+  in full screen; `recomplauncher.json` has rows for the button symbols and the 2T triggers; `prepared.json` is removed when a rebuild starts,
+  so an interrupted build never looks finished; the source tarball is `emotionalsense-<version>-source.tar.gz` (was `-src`).
+
+- `PSPRECOMP_GE_CENSUS=1` (test aid): the GE report lists every command the interpreter does not decode, per game scene, with how
+  many carried a non-zero argument; `EMOTIONALSENSE_TRACE_VBDT=<from>-<to>` prints the guest clock step and the firmware calls per vblank.
+  Measured in 29 routes: the game uses no texture-coordinate generation, block transfer, stencil or colour/alpha mask
+  (`docs/technical.md`), so none was implemented.
+- The speed check of `scripts/check_scripts.sh` runs on a save built by the routes (`scripts/dump/profile.script`), not on the player's
+  save, and measures the scroll by contrast and by fitting each beat line's path: five passes in a row agree within 1 % (a measure out of the 1 % limit is repeated once).
+
 - **RecompLauncher support**: `recomplauncher.json` ships at the top of every package and at the root of
   the AppImage. RecompLauncher compares an .iso with the Redump dump (its verified badge; the game's own check still decides), builds
   the game window-less with `--prepare --progress-lines` (`progress <0..1> <step>` lines; an already

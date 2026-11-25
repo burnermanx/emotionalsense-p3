@@ -26,13 +26,34 @@ class Guard(unittest.TestCase):
                   "module/readme", "prepared.json", "libpsprecomp.a"]:
             self.assertTrue(guard.violations([n]), n)
 
+    def test_a_folder_named_like_the_game_is_not_the_game(self):
+        """The Android sources live in io/emotionalsense/: the source tarball must pass, a file of that name must not."""
+        import io
+        import tarfile
+        with tempfile.TemporaryDirectory() as td:
+            tgz = Path(td) / "emotionalsense-0.2.0-source.tar.gz"
+            with tarfile.open(tgz, "w:gz") as t:
+                d = tarfile.TarInfo("src/io/emotionalsense")
+                d.type = tarfile.DIRTYPE
+                t.addfile(d)
+                f = tarfile.TarInfo("src/io/emotionalsense/Main.kt")
+                f.size = 2
+                t.addfile(f, io.BytesIO(b"ok"))
+            self.assertEqual(guard.violations(guard.listing(tgz)), [])
+            bad = Path(td) / "bad.tar.gz"
+            with tarfile.open(bad, "w:gz") as t:
+                f = tarfile.TarInfo("game/emotionalsense")
+                f.size = 2
+                t.addfile(f, io.BytesIO(b"ok"))
+            self.assertTrue(guard.violations(guard.listing(bad)))
+
     def test_artefact_names(self):
         for ok in ("EmotionalSense-P3-0.1.0-linux-x86_64.AppImage", "EmotionalSense-P3-0.1.0-linux-x86_64.tar.gz",
                    "EmotionalSense-P3-0.1.0-linux-aarch64.AppImage", "EmotionalSense-P3-0.1.0-linux-aarch64.tar.gz",
                    "EmotionalSense-P3-0.1.0-windows-x86_64.zip", "EmotionalSense-P3-0.1.0-windows-arm64.zip",
                    "EmotionalSense-P3-0.2.0-android-arm64.apk", "EmotionalSense-P3-0.2.0-android-x86_64.apk"):
             self.assertIsNone(guard.name_problem(Path("out") / ok), ok)
-        self.assertIsNone(guard.name_problem(Path("out/emotionalsense-0.1.0-src.tar.gz")))
+        self.assertIsNone(guard.name_problem(Path("out/emotionalsense-0.1.0-source.tar.gz")))
         self.assertTrue(guard.name_problem(Path("out/EmotionalSense-P3-0.1.0-x86_64.AppImage")))     # no system
         self.assertTrue(guard.name_problem(Path("out/EmotionalSense-P3-0.1.0-win64.zip")))           # old name
         self.assertTrue(guard.name_problem(Path("out/EmotionalSense-Launcher-x86_64.AppImage")))  # a stale name

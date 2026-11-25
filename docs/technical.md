@@ -103,7 +103,18 @@ Known bugs and recent findings, in priority order:
   not a grid defect; the separate anchor was not applied.
 - **The stream change still differs.** PPSSPP has three long frames between
   484 and 510, ours has one at 481 (~27 frames). The title lands at 4624 here
-  and 4638 there.
+  and 4638 there. Round 37 measured ours with `EMOTIONALSENSE_TRACE_VBDT=430-560`: two long
+  frames, 11 and 9 periods (183 and 150 ms), at vblanks ~476 and ~478, then the
+  firmware-call rate goes from ~50 to ~460 per frame for the rest of the opening. In the
+  first one the main thread is in the player's stop function (`0x7A7EC`): it
+  `sceKernelWaitThreadEndCB`s the player's threads while `SetEventFlag(evf, 3)` (`0x7BD90`) is
+  called once per frame, ten times; in the second the feeder thread polls
+  `sceMpegRingbufferAvailableSize` / `Put` / `DelayThreadCB` ~100 times per frame
+  (961 `Put` calls in 9 frames). The one-call-per-frame rhythm points to the thread
+  wake-up latency of our scheduler (a thread woken by an event flag runs at the next
+  vblank instead of at once), not to I/O (no async read is pending); not confirmed
+  against PPSSPP, whose `work/ref/cadence_ppsspp_opening.txt` rows are not vblanks
+  (5.56 ms each), so the two traces cannot be compared line by line yet.
 
 `EMOTIONALSENSE_CLOCK=virtual` works: it no longer hangs, and it decodes the
 opening (title at ~1875) and reaches gameplay with `scripts/screens.script`.
@@ -131,9 +142,17 @@ instead of one per frame; the earlier "~21.5 fps is the native rhythm" reading
 was the player in permanent recovery. The song-select preview uses the same
 player and has the same cadence.
 
-The GE interpreter still ignores texture-coordinate generation (`TEXFUNC`) and
-a few rarely used commands (block transfer, stencil, masks). Gameplay does not
-use them; some menu effects might.
+The GE interpreter ignores texture-coordinate generation (`TMAPMODE` 0xC0, `TEXSHADELS` 0xC1, the
+texture matrix 0x40/0x41), block transfer (0xB2-0xB5, 0xEB/0xEC/0xEE, `TRXKICK` 0xEA), stencil (0x24, 0xDC, 0xDD)
+and the colour/alpha write masks (0xE8, 0xE9), and it does not sample mip levels, expand patches or follow the
+bounding-box jump. **The game uses none of them** (round 37, `PSPRECOMP_GE_CENSUS=1`, 29 routes: the
+`scripts/dump` routes (20), mission, results with notices, 4.2T/6.2T, full songs, effector, title exit): 13.5 million
+display lists in 9 scenes (0-4, 6, 7, 9, 10), and in every run each of these commands arrives once or twice, in scene 0, with argument 0, from
+the library's initial state (`sceGuInit`); `TRXKICK`, patches, `BJUMP` and `SIGNAL` never arrive at all. The only
+non-zero ignored commands are also initial (0x16, 0x36 patch division, 0x9B cull face with culling never enabled,
+0xD6/0xD7 depth range, 0xE2-0xE5 the dither matrix). Nothing was implemented for them: a render difference against
+PPSSPP in these scenes is not caused by a missing GE command. Scenes no route reaches (5, 8, 11 and above) were not
+visited.
 
 `--internal-scale N|auto` (or `EMOTIONALSENSE_INTERNAL_SCALE`) draws into a
 `480N x 272N` target instead of 480x272 and presents that, so the geometry is
