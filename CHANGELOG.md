@@ -17,6 +17,13 @@ build the rest from your own disc.
   in full screen; `recomplauncher.json` has rows for the button symbols and the 2T triggers; `prepared.json` is removed when a rebuild starts,
   so an interrupted build never looks finished; the source tarball is `emotionalsense-<version>-source.tar.gz` (was `-src`).
 
+- `PSPRECOMP_GE_CENSUS=1` (test aid): the GE report lists every command the interpreter does not decode, per game scene, with how
+  many carried a non-zero argument; `EMOTIONALSENSE_TRACE_VBDT=<from>-<to>` prints the guest clock step and the firmware calls per vblank.
+  Measured in 29 routes: the game uses no texture-coordinate generation, block transfer, stencil or colour/alpha mask
+  (`docs/technical.md`), so none was implemented.
+- The speed check of `scripts/check_scripts.sh` runs on a save built by the routes (`scripts/dump/profile.script`), not on the player's
+  save, and measures the scroll by contrast and by fitting each beat line's path: five passes in a row agree within 1 %.
+
 - **RecompLauncher support**: `recomplauncher.json` ships at the top of every package and at the root of
   the AppImage. RecompLauncher compares an .iso with the Redump dump (its verified badge; the game's own check still decides), builds
   the game window-less with `--prepare --progress-lines` (`progress <0..1> <step>` lines; an already

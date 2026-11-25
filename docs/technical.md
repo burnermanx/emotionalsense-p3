@@ -131,9 +131,17 @@ instead of one per frame; the earlier "~21.5 fps is the native rhythm" reading
 was the player in permanent recovery. The song-select preview uses the same
 player and has the same cadence.
 
-The GE interpreter still ignores texture-coordinate generation (`TEXFUNC`) and
-a few rarely used commands (block transfer, stencil, masks). Gameplay does not
-use them; some menu effects might.
+The GE interpreter ignores texture-coordinate generation (`TMAPMODE` 0xC0, `TEXSHADELS` 0xC1, the
+texture matrix 0x40/0x41), block transfer (0xB2-0xB5, 0xEB/0xEC/0xEE, `TRXKICK` 0xEA), stencil (0x24, 0xDC, 0xDD)
+and the colour/alpha write masks (0xE8, 0xE9), and it does not sample mip levels, expand patches or follow the
+bounding-box jump. **The game uses none of them** (round 37, `PSPRECOMP_GE_CENSUS=1`, 29 routes: the
+`scripts/dump` routes (20), mission, results with notices, 4.2T/6.2T, full songs, effector, title exit): 13.5 million
+display lists in 9 scenes (0-4, 6, 7, 9, 10), and in every run each of these commands arrives once or twice, in scene 0, with argument 0, from
+the library's initial state (`sceGuInit`); `TRXKICK`, patches, `BJUMP` and `SIGNAL` never arrive at all. The only
+non-zero ignored commands are also initial (0x16, 0x36 patch division, 0x9B cull face with culling never enabled,
+0xD6/0xD7 depth range, 0xE2-0xE5 the dither matrix). Nothing was implemented for them: a render difference against
+PPSSPP in these scenes is not caused by a missing GE command. Scenes no route reaches (5, 8, 11 and above) were not
+visited.
 
 `--internal-scale N|auto` (or `EMOTIONALSENSE_INTERNAL_SCALE`) draws into a
 `480N x 272N` target instead of 480x272 and presents that, so the geometry is
