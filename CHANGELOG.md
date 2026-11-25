@@ -10,6 +10,12 @@ build the rest from your own disc.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-25
+
+Android arrives (arm64, built on the phone from your own disc), with the Respect speed system (Auto
+Velocity in steps of 0.1), button symbols for PlayStation, Xbox, Steam Deck and Switch, analog triggers in
+the .2T modes, ZSO images, RecompLauncher support and in-place AppImage updates.
+
 ### Added
 
 - **Android (arm64)**: an APK that prepares the game on the phone from the player's own disc image (Storage Access Framework),
@@ -85,8 +91,6 @@ build the rest from your own disc.
   white with wide spacing, YES / NO in condensed bold capitals with the chosen one on an orange bar, nothing dimmed and no button hints
   (drawn by code at any internal scale and on the software renderer; the texts are rasterised by `scripts/gen_exit_text.py`).
 - The launcher's option hint area shows three lines.
-- Development version is now `0.2.0-dev` (`--version`, the launcher, the kit manifest);
-  `scripts/release.sh` drops the suffix when a release is prepared.
 
 ## [0.1.0] - 2026-11-19
 

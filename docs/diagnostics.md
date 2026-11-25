@@ -67,7 +67,7 @@ keeps them).
 # Steam Deck, Game Mode: launch options of the shortcut
 EMOTIONALSENSE_SYNC_LOG=1 %command%
 # Desktop Mode (Konsole), in the folder of the AppImage
-EMOTIONALSENSE_SYNC_LOG=1 ./EmotionalSense-P3-0.1.0-linux-x86_64.AppImage --run
+EMOTIONALSENSE_SYNC_LOG=1 ./EmotionalSense-P3-0.2.0-linux-x86_64.AppImage --run
 ```
 
 ## Variables
