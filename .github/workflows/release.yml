@@ -55,6 +55,12 @@ jobs:
           set -eu
           version=$(sed -n 's/^project(emotionalsense VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
           tag=${GITHUB_REF_NAME#v}
+          # a release candidate (v0.2.1-rc1) is built from the tree of the release it precedes:
+          # same project VERSION and CHANGELOG section, published as a pre-release
+          case $tag in
+            *-rc[0-9]*) tag=${tag%-rc*} ;;
+            *-*) echo "tag $GITHUB_REF_NAME: only vX.Y.Z and vX.Y.Z-rcN are releases" >&2; exit 1 ;;
+          esac
           if [ "$version" != "$tag" ]; then
             echo "tag $GITHUB_REF_NAME does not match project VERSION $version" >&2
             exit 1
@@ -85,12 +91,16 @@ jobs:
         run: |
           python3 - "$GITHUB_REF_NAME" <<'PY' > out/notes.md
           import re, sys
-          version = sys.argv[1].lstrip("v")
+          tag = sys.argv[1].lstrip("v")
+          version = re.sub(r"-rc\d+$", "", tag)
           text = open("CHANGELOG.md", encoding="utf-8").read()
           m = re.search(rf"^## \[{re.escape(version)}\][^\n]*\n(.*?)(?=^## \[|\Z)",
                         text, re.M | re.S)
           if not m:
               sys.exit(f"no changelog section for {version}")
+          if version != tag:
+              print(f"**Release candidate for {version}, for testing.** It is not the latest release: "
+                    "the AppImages and the launcher keep following the last final release.\n")
           print(m.group(1).strip())
           PY
 
@@ -511,10 +521,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           version=${GITHUB_REF_NAME#v}
-          # 0.1.0 is announced as "v0.1"; a patch release keeps its full number
-          if [ "${version##*.}" = 0 ]; then shown="v${version%.*}"; else shown="v$version"; fi
+          pre=""
+          case $version in
+            *-rc*) pre="--prerelease"; shown="v$version" ;;       # v0.2.1-rc1, never "latest"
+            # 0.1.0 is announced as "v0.1"; a patch release keeps its full number
+            *) if [ "${version##*.}" = 0 ]; then shown="v${version%.*}"; else shown="v$version"; fi ;;
+          esac
           gh release create "$GITHUB_REF_NAME" \
-            --draft \
+            --draft $pre \
             --title "EmotionalSense-P3 $shown" \
             --notes-file parts/source/notes.md \
             release/*
