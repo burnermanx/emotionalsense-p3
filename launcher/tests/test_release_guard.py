@@ -48,6 +48,25 @@ class Guard(unittest.TestCase):
                 f.writestr("bad/djmax_funcs_00.c", "x")
             self.assertEqual(len(guard.violations(guard.listing(z))), 1)
 
+    def test_apk_listing(self):
+        with tempfile.TemporaryDirectory() as td:
+            clean = Path(td) / "EmotionalSense-P3-0.2.0-android.apk"
+            with zipfile.ZipFile(clean, "w") as f:
+                f.writestr("AndroidManifest.xml", "<manifest/>")
+                f.writestr("lib/arm64-v8a/libSDL2.so", "x")
+                f.writestr("lib/arm64-v8a/libpsprecomp.so", "x")
+            self.assertEqual(guard.violations(guard.listing(clean)), [])
+            self.assertEqual(guard.main([str(clean)]), 0)
+
+            bad = Path(td) / "bad.apk"
+            with zipfile.ZipFile(bad, "w") as f:
+                f.writestr("AndroidManifest.xml", "<manifest/>")
+                f.writestr("lib/arm64-v8a/libemotionalsense_game.so", "x")
+                f.writestr("assets/eboot.elf", "x")
+            hits = guard.violations(guard.listing(bad))
+            self.assertEqual(len(hits), 2)
+            self.assertEqual(guard.main([str(bad)]), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

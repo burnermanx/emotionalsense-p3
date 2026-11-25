@@ -46,10 +46,12 @@ endif()
 # each other; it needs the real cooperative scheduler.
 set(PSPRECOMP_REAL_THREADS ON CACHE BOOL "DJMAX needs real guest threads" FORCE)
 set(PSPRECOMP_VULKAN ON CACHE BOOL "Vulkan renderer" FORCE)
-if((UNIX AND NOT APPLE) OR WIN32)
-    set(PSPRECOMP_SDL2 ON CACHE BOOL "SDL2 window on Linux and Windows" FORCE)
+if((UNIX AND NOT APPLE) OR WIN32 OR ANDROID)
+    set(PSPRECOMP_SDL2 ON CACHE BOOL "SDL2 window on Linux, Windows and Android" FORCE)
 endif()
 add_subdirectory(${PSPRECOMP_DIR} psprecomp)
+
+add_executable(es_prxreloc tools/es_prxreloc.c)
 
 # psprecomp only registers its tests when it is the top-level project, so the
 # rasterizer and recompiler tests are exposed here as well. A cross build
@@ -66,6 +68,13 @@ if(NOT CMAKE_CROSSCOMPILING)
 
     add_executable(test_crash_scrub game/tests/test_crash_scrub.c)
     add_test(NAME crash_scrub COMMAND test_crash_scrub)
+
+    find_package(Python3 COMPONENTS Interpreter)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME prxreloc
+                 COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_prxreloc.py"
+                         $<TARGET_FILE:es_prxreloc>)
+    endif()
 endif()
 
 add_subdirectory(game)
